@@ -1,0 +1,41 @@
+{
+  "name": "@responsedata/browser",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Browser SDK for Response agent analytics",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-sdk-packages.mjs browser && tsc --project tsconfig.json",
+    "prepack": "pnpm run build",
+    "test": "node --test test/index.test.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/responsedata/response-js.git",
+    "directory": "packages/browser"
+  },
+  "homepage": "https://github.com/responsedata/response-js/tree/main/packages/browser#readme",
+  "bugs": {
+    "url": "https://github.com/responsedata/response-js/issues"
+  },
+  "license": "MIT"
+}

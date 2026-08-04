@@ -1,0 +1,57 @@
+{
+  "name": "@responsedata/nextjs",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Next.js integration for Response agent analytics",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-sdk-packages.mjs next && tsc --project tsconfig.json",
+    "prepack": "pnpm --filter @responsedata/browser build && pnpm run build",
+    "test": "tsc --project tsconfig.test.json && node --test test/index.test.js"
+  },
+  "dependencies": {
+    "@responsedata/browser": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "peerDependencies": {
+    "next": ">=14",
+    "react": ">=18"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/responsedata/response-js.git",
+    "directory": "packages/next"
+  },
+  "homepage": "https://github.com/responsedata/response-js/tree/main/packages/next#readme",
+  "bugs": {
+    "url": "https://github.com/responsedata/response-js/issues"
+  },
+  "license": "MIT"
+}

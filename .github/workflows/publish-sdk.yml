@@ -1,0 +1,63 @@
+name: Publish SDK Packages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/browser/**"
+      - "packages/cdn/**"
+      - "packages/next/**"
+      - "scripts/build-sdk-packages.mjs"
+      - "scripts/publish-sdk-packages.mjs"
+      - "scripts/version-sdk-packages.mjs"
+      - ".github/workflows/publish-sdk.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-sdk-packages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PUBLISH_BASE_SHA: ${{ github.event.before }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node for npm trusted publishing
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.13.1 --activate
+
+      - name: Require an OIDC-capable npm CLI
+        run: npm install --global npm@11
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test SDK packages
+        run: pnpm sdk:test
+
+      - name: Publish unpublished package versions
+        run: pnpm sdk:publish

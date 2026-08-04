@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "jsx": "react-jsx",
+    "lib": ["DOM", "ES2020"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmitOnError": true,
+    "outDir": "dist",
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2020"
+  },
+  "include": ["src/index.tsx"]
+}
