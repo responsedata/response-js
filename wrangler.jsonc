@@ -1,0 +1,5 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "response-js-cdn",
+  "account_id": "66aa36352dd5c198086a5852386e86ab"
+}

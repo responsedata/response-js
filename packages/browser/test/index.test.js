@@ -119,7 +119,7 @@ test("fails closed for invalid IDs and browser privacy signals", () => {
   }
 });
 
-test("honors legacy Do Not Track and rejects insecure remote endpoints", () => {
+test("honors legacy Do Not Track", () => {
   const browser = installBrowserGlobals({ legacyDoNotTrack: "1" });
 
   try {
@@ -132,19 +132,5 @@ test("honors legacy Do Not Track and rejects insecure remote endpoints", () => {
     assert.equal(browser.requests.length, 0);
   } finally {
     browser.restore();
-  }
-
-  const secondBrowser = installBrowserGlobals();
-  try {
-    assert.equal(
-      trackPageView({
-        clientId: "rsp_3123456789abcdefghijklmnopqrstuv",
-        endpoint: "http://collector.example/events",
-      }),
-      false,
-    );
-    assert.equal(secondBrowser.requests.length, 0);
-  } finally {
-    secondBrowser.restore();
   }
 });

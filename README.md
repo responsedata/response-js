@@ -1,18 +1,18 @@
 # Response JavaScript SDKs
 
-The open-source JavaScript SDKs for Response agent analytics. This repository
-publishes `@responsedata/browser` and `@responsedata/nextjs` from one shared
-TypeScript implementation and builds the hosted browser script used by
-response.sh.
+Open-source JavaScript SDKs and hosted browser script for Response agent
+analytics. The private Response application is maintained in a separate
+repository; this repository communicates with it only through the versioned
+collector contract.
 
-## Packages
+## Repository layout
 
-- [`@responsedata/browser`](packages/browser) is the framework-independent
-  browser SDK.
-- [`@responsedata/nextjs`](packages/next) adds initial-page and client-side
-  route tracking for Next.js.
-- [`@responsedata/browser-cdn`](packages/cdn) is a private workspace that builds
-  the rolling and versioned hosted scripts; it is not published to npm.
+- [`packages/browser`](packages/browser) publishes `@responsedata/browser`.
+- [`packages/next`](packages/next) publishes `@responsedata/nextjs`.
+- [`apps/cdn`](apps/cdn) builds and deploys the hosted browser script. It is an
+  application workspace, not an npm package.
+- [`docs/collector-api-v1.md`](docs/collector-api-v1.md) defines the stable API
+  boundary between these public SDKs and the private collector.
 
 ## Installation
 
@@ -45,12 +45,16 @@ For HTML and CMS sites, use the hosted script:
 ```html
 <script
   defer
-  src="https://www.response.sh/sdk/browser.js"
+  src="https://cdn.response.sh/browser.js"
   data-client-id="YOUR_PUBLIC_CLIENT_ID">
 </script>
 ```
 
-See the individual package READMEs for API and privacy details.
+Production installations may pin a release such as
+`https://cdn.response.sh/0.1.0/browser.js`.
+
+Sites with a Content Security Policy must allow `https://cdn.response.sh` in
+`script-src` and `https://www.response.sh` in `connect-src`.
 
 ## Development
 
@@ -59,49 +63,33 @@ pnpm install
 pnpm test
 ```
 
-`pnpm sdk:build` creates both npm package outputs and the CDN files under
-`packages/cdn/dist`. When this repository and the private `response` repository
-are sibling directories, update the app's committed hosted assets with:
+`pnpm build` creates both npm package outputs and the CDN file under
+`apps/cdn/dist`. No sibling checkout of the private Response application is
+required.
 
-```sh
-pnpm sdk:build
-pnpm --dir ../response sdk:sync
-```
+## Releasing
 
-## Publishing
-
-The two public packages and private CDN workspace stay on the same version.
-For a release:
+The two public npm packages stay on the same version, and the CDN derives its
+version from `@responsedata/browser`. Prepare and validate a patch release with:
 
 ```sh
 pnpm sdk:version patch
-pnpm sdk:test
+pnpm test
 pnpm sdk:publish:dry-run
+pnpm cdn:deploy:dry-run
+git add .
+git commit -m "Release Response JS v0.1.1"
+git tag v0.1.1
+git push origin main v0.1.1
 ```
 
-Commit the source and version changes together. A push to `main` automatically
-runs `.github/workflows/publish-sdk.yml`. The workflow publishes packages in
-workspace dependency order and rejects SDK source changes without a matching
-version bump.
+Use the version written by `pnpm sdk:version` in the commit message and tag.
+The tag triggers [the release workflow](.github/workflows/publish-sdk.yml),
+which verifies the tag, tests all workspaces, publishes missing npm versions,
+then uploads immutable and rolling CDN objects.
 
-The first release must be bootstrapped by an npm owner of the `@responsedata`
-scope:
-
-```sh
-npm login
-pnpm sdk:publish
-```
-
-Then configure `publish-sdk.yml` as the trusted GitHub Actions publisher for
-both npm packages with:
-
-- Organization or user: `responsedata`
-- Repository: `response-js`
-- Workflow filename: `publish-sdk.yml`
-- Allowed action: `npm publish`
-
-The workflow uses short-lived OIDC credentials and does not require an
-`NPM_TOKEN` secret.
+Before the first automated release, configure npm trusted publishing and the
+Cloudflare R2 bucket by following [`apps/cdn/README.md`](apps/cdn/README.md).
 
 ## License
 

@@ -1,22 +1,25 @@
 {
   "name": "response-js",
-  "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.13.1",
   "engines": {
     "node": ">=20.12.0"
   },
   "scripts": {
-    "build": "pnpm sdk:build",
-    "sdk:build": "pnpm --filter @responsedata/browser build && pnpm --filter @responsedata/nextjs build && pnpm --filter @responsedata/browser-cdn build",
+    "build": "pnpm --filter @responsedata/browser build && pnpm --filter @responsedata/nextjs build && pnpm --filter @responsedata/browser-cdn build",
+    "cdn:build": "pnpm --filter @responsedata/browser-cdn build",
+    "cdn:deploy": "pnpm cdn:build && node scripts/deploy-cdn.mjs",
+    "cdn:deploy:dry-run": "pnpm cdn:build && node scripts/deploy-cdn.mjs --dry-run",
+    "cdn:test": "pnpm cdn:build && pnpm --filter @responsedata/browser-cdn test",
+    "release:verify": "node scripts/verify-release-tag.mjs",
     "sdk:publish": "node scripts/publish-sdk-packages.mjs",
     "sdk:publish:dry-run": "node scripts/publish-sdk-packages.mjs --dry-run",
-    "sdk:test": "pnpm sdk:build && pnpm --filter @responsedata/browser test && pnpm --filter @responsedata/nextjs test && pnpm --filter @responsedata/browser-cdn test",
     "sdk:version": "node scripts/version-sdk-packages.mjs",
-    "test": "pnpm sdk:test"
+    "test": "pnpm build && pnpm --filter @responsedata/browser test && pnpm --filter @responsedata/nextjs test && pnpm --filter @responsedata/browser-cdn test"
   },
   "devDependencies": {
     "esbuild": "0.25.4",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "wrangler": "^4.115.0"
   }
 }

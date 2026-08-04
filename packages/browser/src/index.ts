@@ -2,7 +2,7 @@ declare const __RESPONSE_SDK_VERSION__: string;
 
 export const SDK_VERSION = __RESPONSE_SDK_VERSION__;
 
-const DEFAULT_ENDPOINT = "https://www.response.sh/api/events";
+const COLLECTOR_ENDPOINT = "https://www.response.sh/api/events";
 const PUBLIC_CLIENT_ID_PATTERN = /^rsp_[A-Za-z0-9_-]{32}$/;
 const DUPLICATE_WINDOW_MS = 1_000;
 
@@ -16,7 +16,6 @@ type PrivacyAwareGlobal = typeof globalThis & {
 
 export type TrackPageViewOptions = {
   clientId: string;
-  endpoint?: string;
   path?: string;
 };
 
@@ -73,30 +72,6 @@ const getReferrerOrigin = () => {
   }
 };
 
-const normalizeEndpoint = (value: string) => {
-  try {
-    const url = new URL(value);
-    const isLoopback =
-      url.hostname === "localhost" ||
-      url.hostname === "127.0.0.1" ||
-      url.hostname === "[::1]";
-
-    if (
-      url.username ||
-      url.password ||
-      (url.protocol !== "https:" &&
-        !(url.protocol === "http:" && isLoopback))
-    ) {
-      return null;
-    }
-
-    url.hash = "";
-    return url.href;
-  } catch {
-    return null;
-  }
-};
-
 const normalizePath = (value: string) => {
   if (!value.startsWith("/") || value.startsWith("//")) {
     return null;
@@ -116,7 +91,6 @@ const normalizePath = (value: string) => {
  */
 export const trackPageView = ({
   clientId,
-  endpoint = DEFAULT_ENDPOINT,
   path,
 }: TrackPageViewOptions): boolean => {
   try {
@@ -132,9 +106,8 @@ export const trackPageView = ({
       return false;
     }
 
-    const normalizedEndpoint = normalizeEndpoint(endpoint);
     const normalizedPath = normalizePath(path ?? location.pathname);
-    if (!normalizedEndpoint || !normalizedPath) {
+    if (!normalizedPath) {
       return false;
     }
 
@@ -149,7 +122,7 @@ export const trackPageView = ({
     lastPageViewKey = pageViewKey;
     lastPageViewTime = now;
 
-    void fetch(normalizedEndpoint, {
+    void fetch(COLLECTOR_ENDPOINT, {
       body: JSON.stringify({
         clientId,
         eventId: createEventId(),

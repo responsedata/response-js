@@ -64,12 +64,11 @@ const buildNextPackage = async () => {
 
 const buildCdnPackage = async () => {
   const browserDirectory = path.join(rootDirectory, "packages/browser");
-  const cdnDirectory = path.join(rootDirectory, "packages/cdn");
+  const cdnDirectory = path.join(rootDirectory, "apps/cdn");
   const version = await readPackageVersion(browserDirectory);
   const stableAsset = path.join(cdnDirectory, "dist/browser.js");
-  const versionedDirectory = path.join(cdnDirectory, `dist/${version}`);
 
-  await fs.mkdir(path.dirname(stableAsset), { recursive: true });
+  await resetGeneratedDirectory(path.join(cdnDirectory, "dist"));
   await build({
     bundle: true,
     define: {
@@ -83,12 +82,6 @@ const buildCdnPackage = async () => {
     platform: "browser",
     target: "es2020",
   });
-
-  await fs.mkdir(versionedDirectory, { recursive: true });
-  await fs.copyFile(
-    stableAsset,
-    path.join(versionedDirectory, "browser.js"),
-  );
 };
 
 if (target === "browser") {

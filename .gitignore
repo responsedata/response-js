@@ -1,4 +1,6 @@
 node_modules/
 packages/*/dist/
+apps/*/dist/
+.wrangler/
 *.log
 .DS_Store

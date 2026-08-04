@@ -7,7 +7,6 @@ import { useEffect } from "react";
 export type ResponseAnalyticsProps = {
   clientId: string;
   enabled?: boolean;
-  endpoint?: string;
 };
 
 /**
@@ -16,15 +15,14 @@ export type ResponseAnalyticsProps = {
 export function ResponseAnalytics({
   clientId,
   enabled = true,
-  endpoint,
 }: ResponseAnalyticsProps) {
   const pathname = usePathname();
 
   useEffect(() => {
     if (enabled && pathname) {
-      trackPageView({ clientId, endpoint, path: pathname });
+      trackPageView({ clientId, path: pathname });
     }
-  }, [clientId, enabled, endpoint, pathname]);
+  }, [clientId, enabled, pathname]);
 
   return null;
 }

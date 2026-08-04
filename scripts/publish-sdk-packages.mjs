@@ -4,7 +4,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { isDeepStrictEqual } from "node:util";
 
 const rootDirectory = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -15,16 +14,7 @@ const repositoryUrl = "git+https://github.com/responsedata/response-js.git";
 const packageFiles = [
   "packages/browser/package.json",
   "packages/next/package.json",
-  "packages/cdn/package.json",
 ];
-const publicPackageFiles = new Set(packageFiles.slice(0, 2));
-
-const withoutRepositoryMetadata = ({
-  bugs: _bugs,
-  homepage: _homepage,
-  repository: _repository,
-  ...manifest
-}) => manifest;
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
@@ -39,14 +29,11 @@ const run = (command, args, options = {}) => {
 };
 
 const packages = await Promise.all(
-  packageFiles.map(async (file) => ({
-    file,
-    manifest: JSON.parse(
-      await fs.readFile(path.join(rootDirectory, file), "utf8"),
-    ),
-  })),
+  packageFiles.map(async (file) =>
+    JSON.parse(await fs.readFile(path.join(rootDirectory, file), "utf8")),
+  ),
 );
-const versions = new Set(packages.map(({ manifest }) => manifest.version));
+const versions = new Set(packages.map((manifest) => manifest.version));
 
 if (versions.size !== 1) {
   throw new Error(
@@ -54,9 +41,10 @@ if (versions.size !== 1) {
   );
 }
 
-for (const { manifest } of packages.filter(
-  ({ manifest }) => manifest.private !== true,
-)) {
+for (const manifest of packages) {
+  if (manifest.private === true) {
+    throw new Error(`${manifest.name} is configured as a private package.`);
+  }
   if (manifest.repository?.url !== repositoryUrl) {
     throw new Error(
       `${manifest.name} must declare repository.url as ${repositoryUrl}.`,
@@ -71,77 +59,44 @@ for (const { manifest } of packages.filter(
   }
 }
 
-const base = process.env.PUBLISH_BASE_SHA?.trim();
-if (base && !/^0+$/.test(base)) {
-  const diff = run("git", ["diff", "--name-only", base, "HEAD"]);
-  if (diff.status !== 0) {
-    throw new Error(`Unable to compare this release with ${base}.`);
-  }
+for (const manifest of packages) {
+  if (!dryRun) {
+    const published = run("npm", [
+      "view",
+      `${manifest.name}@${manifest.version}`,
+      "version",
+      "--json",
+    ]);
 
-  const releaseInputsChanged = diff.stdout.split("\n").some((file) => {
-    if (file === "scripts/build-sdk-packages.mjs") {
-      return true;
-    }
-    if (publicPackageFiles.has(file)) {
-      const previous = run("git", ["show", `${base}:${file}`]);
-      if (previous.status !== 0) {
-        return true;
-      }
-      const current = packages.find((entry) => entry.file === file)?.manifest;
-      return (
-        !current ||
-        !isDeepStrictEqual(
-          withoutRepositoryMetadata(JSON.parse(previous.stdout)),
-          withoutRepositoryMetadata(current),
-        )
+    if (published.status === 0) {
+      console.log(
+        `Skipping ${manifest.name}@${manifest.version}; it is already published.`,
       );
+      continue;
     }
-    return (
-      file.startsWith("packages/browser/") ||
-      file.startsWith("packages/cdn/") ||
-      file.startsWith("packages/next/")
-    );
-  });
 
-  if (releaseInputsChanged) {
-    const unbumped = packages.filter(({ file, manifest }) => {
-      const previous = run("git", ["show", `${base}:${file}`]);
-      return (
-        previous.status === 0 &&
-        JSON.parse(previous.stdout).version === manifest.version
-      );
-    });
-
-    if (unbumped.length > 0) {
+    const lookupOutput = `${published.stdout}\n${published.stderr}`;
+    if (!lookupOutput.includes("E404")) {
       throw new Error(
-        [
-          "SDK release inputs changed without a version bump:",
-          ...unbumped.map(
-            ({ manifest }) => `- ${manifest.name}@${manifest.version}`,
-          ),
-          "Run `pnpm sdk:version patch`, test, and commit the manifests.",
-        ].join("\n"),
+        `Unable to check ${manifest.name}@${manifest.version} on npm:\n${lookupOutput}`,
       );
     }
   }
-}
 
-const publishArgs = [
-  "--filter",
-  "@responsedata/browser",
-  "--filter",
-  "@responsedata/nextjs",
-  "--recursive",
-  "publish",
-  "--access",
-  "public",
-  "--no-git-checks",
-];
-if (dryRun) {
-  publishArgs.push("--dry-run");
-}
+  const publishArgs = [
+    "--filter",
+    manifest.name,
+    "publish",
+    "--access",
+    "public",
+    "--no-git-checks",
+  ];
+  if (dryRun) {
+    publishArgs.push("--dry-run");
+  }
 
-const result = run("pnpm", publishArgs, { stdio: "inherit" });
-if (result.status !== 0) {
-  process.exit(result.status ?? 1);
+  const result = run("pnpm", publishArgs, { stdio: "inherit" });
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
 }

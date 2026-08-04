@@ -12,7 +12,6 @@ const releaseType = process.argv[2];
 const packageFiles = [
   "packages/browser/package.json",
   "packages/next/package.json",
-  "packages/cdn/package.json",
 ];
 const bumpIndex = { major: 0, minor: 1, patch: 2 }[releaseType];
 

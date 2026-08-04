@@ -12,13 +12,9 @@ const artifactPath = path.resolve(
 );
 const browserPackage = JSON.parse(
   fs.readFileSync(
-    path.resolve(testDirectory, "../../browser/package.json"),
+    path.resolve(testDirectory, "../../../packages/browser/package.json"),
     "utf8",
   ),
-);
-const versionedArtifactPath = path.resolve(
-  testDirectory,
-  `../dist/${browserPackage.version}/browser.js`,
 );
 
 function runSdk({
@@ -46,7 +42,7 @@ function runSdk({
     document: {
       currentScript: {
         dataset: { clientId },
-        src: "https://www.response.sh/sdk/browser.js",
+        src: "https://cdn.response.sh/browser.js",
       },
       referrer,
     },
@@ -67,7 +63,7 @@ function runSdk({
   return requests;
 }
 
-test("sends one minimal observation to the SDK origin", () => {
+test("sends one minimal observation to the stable collector", () => {
   const requests = runSdk();
 
   assert.equal(requests.length, 1);
@@ -98,8 +94,9 @@ test("sends one minimal observation to the SDK origin", () => {
   assert.equal(payload.path, "/pricing");
   assert.equal(payload.referrerOrigin, "https://search.example");
   assert.equal(payload.signals.webdriver, true);
-  assert.equal(payload.sdkVersion, "0.1.0");
+  assert.equal(payload.sdkVersion, browserPackage.version);
   assert.equal(JSON.stringify(payload).includes("private@example.com"), false);
+  assert.equal(payload.version, 1);
 });
 
 test("does nothing without a valid public client ID", () => {
@@ -119,12 +116,5 @@ test("delivery failures never escape into the page", () => {
         throw new Error("network unavailable");
       },
     }),
-  );
-});
-
-test("the rolling and versioned CDN artifacts contain the same SDK", () => {
-  assert.deepEqual(
-    fs.readFileSync(artifactPath),
-    fs.readFileSync(versionedArtifactPath),
   );
 });
