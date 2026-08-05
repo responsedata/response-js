@@ -70,23 +70,19 @@ required.
 ## Releasing
 
 The two public npm packages stay on the same version, and the CDN derives its
-version from `@responsedata/browser`. Prepare and validate a patch release with:
+version from `@responsedata/browser`. Create a patch release with one command:
 
 ```sh
-pnpm sdk:version patch
-pnpm test
-pnpm sdk:publish:dry-run
-pnpm cdn:deploy:dry-run
-git add .
-git commit -m "Release Response JS v0.1.1"
-git tag v0.1.1
-git push origin main v0.1.1
+pnpm release
 ```
 
-Use the version written by `pnpm sdk:version` in the commit message and tag.
-The tag triggers [the release workflow](.github/workflows/publish-sdk.yml),
-which verifies the tag, tests all workspaces, publishes missing npm versions,
-then uploads immutable and rolling CDN objects.
+Use `pnpm release minor` or `pnpm release major` for those release types. The
+command requires a clean `main` synchronized with `origin/main`; it bumps both
+npm package versions, runs the tests and CDN upload dry-run, commits, tags, and
+atomically pushes the release. The tag triggers
+[the release workflow](.github/workflows/publish-sdk.yml), which verifies the
+tag, publishes missing npm versions, then uploads immutable and rolling CDN
+objects.
 
 Before the first automated release, configure npm trusted publishing and the
 Cloudflare R2 bucket by following [`apps/cdn/README.md`](apps/cdn/README.md).

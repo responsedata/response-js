@@ -33,7 +33,7 @@ This non-publishable workspace produces the browser script served from
 6. On npmjs.com, configure `.github/workflows/publish-sdk.yml` as the trusted
    publisher for both `@responsedata/browser` and `@responsedata/nextjs`.
 
-The deploy script writes `Content-Type` and `Cache-Control` metadata on each R2
+The upload script writes `Content-Type` and `Cache-Control` metadata on each R2
 object. Classic cross-origin `<script>` tags do not require an R2 CORS policy.
 Add one later only if browsers will fetch these objects through JavaScript or
 ES module imports.
@@ -49,13 +49,13 @@ Official references:
 
 ```sh
 pnpm cdn:test
-pnpm cdn:deploy:dry-run
+pnpm cdn:upload:dry-run
 ```
 
-To make a real manual deployment after Cloudflare credentials are exported:
+To upload the assets manually after Cloudflare credentials are exported:
 
 ```sh
-pnpm cdn:deploy
+pnpm cdn:upload
 ```
 
 Normal production releases should use a `vX.Y.Z` Git tag so npm and CDN

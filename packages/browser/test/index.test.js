@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 import { trackPageView } from "../dist/index.js";
 
 const CLIENT_ID = "rsp_0123456789abcdefghijklmnopqrstuv";
+const browserPackage = JSON.parse(
+  fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+);
 
 const installBrowserGlobals = ({
   doNotTrack = null,
@@ -77,7 +81,7 @@ test("queues a minimal page observation with the default collector", () => {
     assert.equal(payload.path, "/pricing");
     assert.equal(payload.referrerOrigin, "https://search.example");
     assert.equal(payload.signals.webdriver, true);
-    assert.equal(payload.sdkVersion, "0.1.0");
+    assert.equal(payload.sdkVersion, browserPackage.version);
     assert.equal(
       JSON.stringify(payload).includes("private"),
       false,

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node ../../scripts/build-sdk-packages.mjs cdn",
-    "deploy": "pnpm run build && node ../../scripts/deploy-cdn.mjs",
+    "upload": "pnpm run build && node ../../scripts/upload-cdn.mjs",
     "test": "node --test test/index.test.js"
   },
   "dependencies": {

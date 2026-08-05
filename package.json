@@ -8,9 +8,10 @@
   "scripts": {
     "build": "pnpm --filter @responsedata/browser build && pnpm --filter @responsedata/nextjs build && pnpm --filter @responsedata/browser-cdn build",
     "cdn:build": "pnpm --filter @responsedata/browser-cdn build",
-    "cdn:deploy": "pnpm cdn:build && node scripts/deploy-cdn.mjs",
-    "cdn:deploy:dry-run": "pnpm cdn:build && node scripts/deploy-cdn.mjs --dry-run",
+    "cdn:upload": "pnpm cdn:build && node scripts/upload-cdn.mjs",
+    "cdn:upload:dry-run": "pnpm cdn:build && node scripts/upload-cdn.mjs --dry-run",
     "cdn:test": "pnpm cdn:build && pnpm --filter @responsedata/browser-cdn test",
+    "release": "node scripts/create-release.mjs",
     "release:verify": "node scripts/verify-release-tag.mjs",
     "sdk:publish": "node scripts/publish-sdk-packages.mjs",
     "sdk:publish:dry-run": "node scripts/publish-sdk-packages.mjs --dry-run",

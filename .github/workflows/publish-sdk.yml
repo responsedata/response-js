@@ -55,4 +55,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RESPONSE_CDN_R2_BUCKET: response-js-cdn
-        run: pnpm cdn:deploy
+        run: pnpm cdn:upload
