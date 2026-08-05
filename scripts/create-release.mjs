@@ -15,6 +15,16 @@ const versionFiles = [
   "packages/browser/package.json",
   "packages/next/package.json",
 ];
+const releaseEnvironment = {
+  ...process.env,
+  EDITOR: "true",
+  GIT_EDITOR: "true",
+  GIT_MERGE_AUTOEDIT: "no",
+  GIT_PAGER: "cat",
+  GIT_SEQUENCE_EDITOR: "true",
+  PAGER: "cat",
+  VISUAL: "true",
+};
 
 if (!allowedReleaseTypes.has(releaseType)) {
   console.error("\nRelease stopped\n");
@@ -27,12 +37,7 @@ const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
     cwd: rootDirectory,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_EDITOR: "true",
-      GIT_MERGE_AUTOEDIT: "no",
-      GIT_SEQUENCE_EDITOR: "true",
-    },
+    env: releaseEnvironment,
     ...options,
   });
   if (result.error) {
@@ -145,7 +150,7 @@ try {
       );
     }
 
-    runChecked("git", ["diff", "--check"]);
+    runChecked("git", ["--no-pager", "diff", "--check"]);
     runChecked("git", ["add", ...versionFiles]);
 
     // Create the release commit and tag through Git's non-interactive plumbing.
