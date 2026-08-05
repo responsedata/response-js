@@ -9,7 +9,14 @@ test("builds a client component with the expected public export", () => {
   );
 
   assert.match(source, /^"use client";/);
+  assert.match(source, /from "next\/navigation\.js"/);
   assert.match(source, /usePathname\(\)/);
   assert.match(source, /trackPageView\(\{ clientId, path: pathname \}\)/);
   assert.match(source, /export\s*\{\s*ResponseAnalytics\s*\}/);
+});
+
+test("loads from Node without requiring package transpilation", async () => {
+  const sdk = await import("../dist/index.js");
+
+  assert.equal(typeof sdk.ResponseAnalytics, "function");
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { trackPageView } from "@responsedata/browser";
-import { usePathname } from "next/navigation";
+import { usePathname } from "next/navigation.js";
 import { useEffect } from "react";
 
 export type ResponseAnalyticsProps = {

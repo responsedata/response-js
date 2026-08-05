@@ -147,20 +147,35 @@ try {
 
     runChecked("git", ["diff", "--check"]);
     runChecked("git", ["add", ...versionFiles]);
-    runChecked("git", [
-      "commit",
-      "--no-gpg-sign",
-      "--message",
+
+    // Create the release commit and tag through Git's non-interactive plumbing.
+    // This cannot open an editor or signing prompt, regardless of user config.
+    const parentCommit = output("git", ["rev-parse", "HEAD"]);
+    const releaseTree = output("git", ["write-tree"]);
+    const releaseCommit = output("git", [
+      "commit-tree",
+      releaseTree,
+      "-p",
+      parentCommit,
+      "-m",
       `Release Response JS ${releaseTag}`,
+    ]);
+    runChecked("git", [
+      "update-ref",
+      "--create-reflog",
+      "-m",
+      `release: ${releaseTag}`,
+      "refs/heads/main",
+      releaseCommit,
+      parentCommit,
     ]);
     releaseCommitted = true;
     runChecked("git", [
-      "tag",
-      "--annotate",
-      "--no-sign",
-      releaseTag,
-      "--message",
-      `Release ${releaseTag}`,
+      "update-ref",
+      "-m",
+      `release: ${releaseTag}`,
+      `refs/tags/${releaseTag}`,
+      releaseCommit,
     ]);
     runChecked("git", ["push", "--atomic", "origin", "main", releaseTag]);
 
