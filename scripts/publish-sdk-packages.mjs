@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,20 @@ const packageFiles = [
   "packages/browser/package.json",
   "packages/next/package.json",
 ];
+const npmEnvironment = { ...process.env };
+
+// pnpm exposes private npm-config variables to child processes. npm warns
+// about these unknown values, and they are unrelated to publishing.
+for (const key of Object.keys(npmEnvironment)) {
+  const normalizedKey = key.toLowerCase();
+  if (
+    normalizedKey === "npm_config_verify_deps_before_run" ||
+    normalizedKey.includes("jsr_registry") ||
+    normalizedKey.includes("jsr-registry")
+  ) {
+    delete npmEnvironment[key];
+  }
+}
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
@@ -59,44 +74,87 @@ for (const manifest of packages) {
   }
 }
 
-for (const manifest of packages) {
-  if (!dryRun) {
-    const published = run("npm", [
-      "view",
-      `${manifest.name}@${manifest.version}`,
-      "version",
-      "--json",
-    ]);
+const stagingDirectory = await fs.mkdtemp(
+  path.join(os.tmpdir(), "response-js-publish-"),
+);
 
-    if (published.status === 0) {
-      console.log(
-        `Skipping ${manifest.name}@${manifest.version}; it is already published.`,
+try {
+  for (const manifest of packages) {
+    if (!dryRun) {
+      const published = run(
+        "npm",
+        [
+          "view",
+          `${manifest.name}@${manifest.version}`,
+          "version",
+          "--json",
+        ],
+        { env: npmEnvironment },
       );
-      continue;
+
+      if (published.status === 0) {
+        console.log(
+          `Skipping ${manifest.name}@${manifest.version}; it is already published.`,
+        );
+        continue;
+      }
+
+      const lookupOutput = `${published.stdout}\n${published.stderr}`;
+      if (!lookupOutput.includes("E404")) {
+        throw new Error(
+          `Unable to check ${manifest.name}@${manifest.version} on npm:\n${lookupOutput}`,
+        );
+      }
     }
 
-    const lookupOutput = `${published.stdout}\n${published.stderr}`;
-    if (!lookupOutput.includes("E404")) {
+    const packageDirectory = await fs.mkdtemp(
+      path.join(stagingDirectory, "package-"),
+    );
+    const packResult = run(
+      "pnpm",
+      [
+        "--filter",
+        manifest.name,
+        "pack",
+        "--pack-destination",
+        packageDirectory,
+      ],
+      { stdio: "inherit" },
+    );
+    if (packResult.status !== 0) {
+      process.exitCode = packResult.status ?? 1;
+      break;
+    }
+
+    const archives = (await fs.readdir(packageDirectory)).filter((file) =>
+      file.endsWith(".tgz"),
+    );
+    if (archives.length !== 1) {
       throw new Error(
-        `Unable to check ${manifest.name}@${manifest.version} on npm:\n${lookupOutput}`,
+        `Expected one tarball for ${manifest.name}; found ${archives.length}.`,
       );
     }
-  }
 
-  const publishArgs = [
-    "--filter",
-    manifest.name,
-    "publish",
-    "--access",
-    "public",
-    "--no-git-checks",
-  ];
-  if (dryRun) {
-    publishArgs.push("--dry-run");
-  }
+    const publishArgs = [
+      "publish",
+      path.join(packageDirectory, archives[0]),
+      "--access",
+      "public",
+    ];
+    if (dryRun) {
+      publishArgs.push("--dry-run");
+    }
 
-  const result = run("pnpm", publishArgs, { stdio: "inherit" });
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+    // Trusted publishing exchanges GitHub's OIDC token only for npm publish.
+    const publishResult = run("npm", publishArgs, {
+      env: npmEnvironment,
+      stdio: "inherit",
+    });
+    if (publishResult.status !== 0) {
+      process.exitCode = publishResult.status ?? 1;
+      break;
+    }
   }
+} finally {
+  await fs.rm(stagingDirectory, { force: true, recursive: true });
 }

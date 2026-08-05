@@ -27,6 +27,12 @@ const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
     cwd: rootDirectory,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_EDITOR: "true",
+      GIT_MERGE_AUTOEDIT: "no",
+      GIT_SEQUENCE_EDITOR: "true",
+    },
     ...options,
   });
   if (result.error) {
@@ -141,11 +147,17 @@ try {
 
     runChecked("git", ["diff", "--check"]);
     runChecked("git", ["add", ...versionFiles]);
-    runChecked("git", ["commit", "-m", `Release Response JS ${releaseTag}`]);
+    runChecked("git", [
+      "commit",
+      "--no-gpg-sign",
+      "--message",
+      `Release Response JS ${releaseTag}`,
+    ]);
     releaseCommitted = true;
     runChecked("git", [
       "tag",
       "--annotate",
+      "--no-sign",
       releaseTag,
       "--message",
       `Release ${releaseTag}`,
