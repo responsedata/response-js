@@ -1,6 +1,6 @@
 {
   "name": "@responsedata/nextjs",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "module",
   "description": "Next.js integration for Response agent analytics",
   "sideEffects": false,
