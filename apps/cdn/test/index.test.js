@@ -18,6 +18,7 @@ const browserPackage = JSON.parse(
 );
 
 function runSdk({
+  cdpRuntimeDetected = true,
   clientId = "rsp_0123456789abcdefghijklmnopqrstuv",
   doNotTrack = null,
   fetcher,
@@ -36,6 +37,13 @@ function runSdk({
 
   const context = vm.createContext({
     URL,
+    console: {
+      debug(value) {
+        if (cdpRuntimeDetected) {
+          void value.stack;
+        }
+      },
+    },
     crypto: {
       randomUUID: () => "39bb0340-379f-46ee-af2d-591d722f4798",
     },
@@ -86,6 +94,7 @@ test("sends one minimal observation to the stable collector", () => {
   );
 
   const payload = JSON.parse(requests[0].init.body);
+  assert.deepEqual(payload.capabilities, ["agent_check_in"]);
   assert.equal(
     payload.clientId,
     "rsp_0123456789abcdefghijklmnopqrstuv",
@@ -93,6 +102,7 @@ test("sends one minimal observation to the stable collector", () => {
   assert.equal(payload.eventId, "39bb0340-379f-46ee-af2d-591d722f4798");
   assert.equal(payload.path, "/pricing");
   assert.equal(payload.referrerOrigin, "https://search.example");
+  assert.equal(payload.signals.cdpRuntimeDetected, true);
   assert.equal(payload.signals.webdriver, true);
   assert.equal(payload.sdkVersion, browserPackage.version);
   assert.equal(JSON.stringify(payload).includes("private@example.com"), false);

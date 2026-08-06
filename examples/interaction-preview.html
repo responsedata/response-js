@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Response interaction preview</title>
+    <style>
+      :root {
+        color: #111827;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      body {
+        background: #f3f4f6;
+        margin: 0;
+        min-height: 100vh;
+      }
+
+      main {
+        box-sizing: border-box;
+        margin: 0 auto;
+        max-width: 760px;
+        padding: 64px 24px;
+      }
+
+      h1 {
+        font-size: 32px;
+        letter-spacing: -0.025em;
+        margin: 0 0 12px;
+      }
+
+      p {
+        color: #4b5563;
+        line-height: 1.6;
+      }
+
+      button {
+        background: #111827;
+        border: 0;
+        border-radius: 8px;
+        color: white;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 600;
+        margin: 12px 0 24px;
+        padding: 10px 14px;
+      }
+
+      pre {
+        background: #111827;
+        border-radius: 10px;
+        color: #d1fae5;
+        font-size: 13px;
+        line-height: 1.5;
+        min-height: 120px;
+        overflow: auto;
+        padding: 16px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Agent check-in preview</h1>
+      <p>
+        This page runs the real browser SDK against local mock responses. It
+        never sends data to the Response server. Complete or bypass the form to
+        inspect the resolution below.
+      </p>
+      <button id="show-interaction" type="button">Show agent check-in</button>
+      <pre id="request-log" aria-live="polite">Starting preview…</pre>
+    </main>
+
+    <script type="module">
+      const clientId = "rsp_0123456789abcdefghijklmnopqrstuv";
+      const sessionKey = `response:agent-check-in:${clientId}`;
+      const requestLog = document.querySelector("#request-log");
+      const showButton = document.querySelector("#show-interaction");
+      const realFetch = globalThis.fetch.bind(globalThis);
+      let previewNumber = 0;
+
+      const log = (label, value) => {
+        const detail = value === undefined ? "" : `\n${JSON.stringify(value, null, 2)}`;
+        requestLog.textContent = `${label}${detail}`;
+        console.log(label, value ?? "");
+      };
+
+      globalThis.fetch = async (input, init = {}) => {
+        const url = String(input);
+
+        if (url === "https://www.response.sh/api/events") {
+          const event = JSON.parse(String(init.body));
+          log("Mock collector received the page observation:", event);
+          return Response.json(
+            {
+              interaction: {
+                id: crypto.randomUUID(),
+                type: "agent_check_in",
+              },
+            },
+            { status: 200 },
+          );
+        }
+
+        if (url.startsWith("https://www.response.sh/api/interactions/")) {
+          const resolution = JSON.parse(String(init.body));
+          log("Mock interaction endpoint received the resolution:", resolution);
+          return new Response(null, { status: 204 });
+        }
+
+        return realFetch(input, init);
+      };
+
+      const { trackPageView } = await import("/browser.js");
+
+      const showInteraction = () => {
+        sessionStorage.removeItem(sessionKey);
+        previewNumber += 1;
+        const queued = trackPageView({
+          clientId,
+          path: `/interaction-preview/${previewNumber}`,
+        });
+
+        if (!queued) {
+          log("The SDK skipped the preview request. Check the browser console.");
+        }
+      };
+
+      showButton.addEventListener("click", showInteraction);
+      globalThis.previewAgentCheckIn = showInteraction;
+      showInteraction();
+    </script>
+  </body>
+</html>

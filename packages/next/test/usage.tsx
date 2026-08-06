@@ -9,6 +9,7 @@ export function RootLayoutIntegration({
         {children}
         <ResponseAnalytics
           clientId="rsp_0123456789abcdefghijklmnopqrstuv"
+          collectorEndpoint="http://localhost:3000/api/events"
         />
       </body>
     </html>

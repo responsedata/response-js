@@ -8,12 +8,14 @@ CORS preflight and currently contains:
 
 ```json
 {
+  "capabilities": ["agent_check_in"],
   "clientId": "rsp_...",
   "eventId": "uuid",
   "path": "/page",
   "referrerOrigin": "https://example.com",
   "sdkVersion": "0.1.0",
   "signals": {
+    "cdpRuntimeDetected": true,
     "webdriver": true
   },
   "version": 1
@@ -22,6 +24,41 @@ CORS preflight and currently contains:
 
 `referrerOrigin` may be `null`. Query parameters, fragments, page contents,
 form values, cookies, and local-storage identifiers are not sent.
+`cdpRuntimeDetected` reports browser instrumentation consistent with a Chrome
+DevTools Protocol runtime connection. It can also be triggered by a person with
+DevTools open, so it is evidence of instrumentation rather than agent identity.
+
+`capabilities` is optional. The current SDK includes `agent_check_in` while it
+can render an interaction. Older SDKs omit the field and retain their existing
+fire-and-forget behavior.
+
+The collector normally returns `204 No Content`. When an automated visit should
+check in and the SDK declares support, it returns `200` with:
+
+```json
+{
+  "interaction": {
+    "id": "uuid",
+    "type": "agent_check_in"
+  }
+}
+```
+
+The SDK renders the fixed check-in form as a required native modal and resolves
+it at `POST https://www.response.sh/api/interactions/{id}`. The page remains
+inaccessible until that endpoint accepts either resolution. A submitted
+check-in is:
+
+```json
+{
+  "resolution": "submitted",
+  "agentName": "ChatGPT",
+  "message": "Researching font-generation tools for a user."
+}
+```
+
+The explicit human escape hatch sends `{ "resolution": "human_bypass" }`.
+Resolution payloads are also sent as `text/plain;charset=UTF-8`.
 
 ## Compatibility policy
 
@@ -33,8 +70,10 @@ form values, cookies, and local-storage identifiers are not sent.
 - A required field or semantic change needs a new protocol version. Deploy the
   collector so it accepts both versions before publishing an SDK that sends the
   new version.
-- Collector responses are not part of the browser API; SDK delivery remains
-  asynchronous and failures must not affect the host page.
+- Collector delivery remains asynchronous unless the server issues a supported
+  interaction. Unknown interaction types do not affect the host page. Once an
+  agent check-in is issued, failed resolution delivery keeps the modal open so
+  the visitor can retry instead of granting access without a recorded result.
 - Private application UI, database, and internal API changes do not require an
   SDK release unless they alter this collector contract.
 

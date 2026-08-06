@@ -28,3 +28,6 @@ export default function RootLayout({
 
 The client ID is public, write-only routing information. Configure the site’s
 exact origin and enable collection in Response before installing the component.
+For a local collector, pass
+`collectorEndpoint="http://localhost:3000/api/events"`. Remote collectors must
+use HTTPS.

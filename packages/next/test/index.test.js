@@ -11,7 +11,10 @@ test("builds a client component with the expected public export", () => {
   assert.match(source, /^"use client";/);
   assert.match(source, /from "next\/navigation\.js"/);
   assert.match(source, /usePathname\(\)/);
-  assert.match(source, /trackPageView\(\{ clientId, path: pathname \}\)/);
+  assert.match(
+    source,
+    /trackPageView\(\{ clientId, collectorEndpoint, path: pathname \}\)/,
+  );
   assert.match(source, /export\s*\{\s*ResponseAnalytics\s*\}/);
 });
 
