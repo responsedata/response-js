@@ -16,6 +16,8 @@ const browserPackage = JSON.parse(
     "utf8",
   ),
 );
+const SESSION_ID = "11111111-1111-4111-8111-111111111111";
+const EVENT_ID = "22222222-2222-4222-8222-222222222222";
 
 function runSdk({
   clientId = "rsp_0123456789abcdefghijklmnopqrstuv",
@@ -33,11 +35,13 @@ function runSdk({
       requests.push({ init, url });
       return Promise.resolve({ ok: true });
     });
+  const storage = new Map();
+  const uuids = [SESSION_ID, EVENT_ID];
 
   const context = vm.createContext({
     URL,
     crypto: {
-      randomUUID: () => "39bb0340-379f-46ee-af2d-591d722f4798",
+      randomUUID: () => uuids.shift(),
     },
     document: {
       currentScript: {
@@ -56,6 +60,10 @@ function runSdk({
       doNotTrack,
       globalPrivacyControl,
       webdriver,
+    },
+    sessionStorage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
     },
   });
 
@@ -86,20 +94,29 @@ test("sends one minimal observation to the stable collector", () => {
   );
 
   const payload = JSON.parse(requests[0].init.body);
-  assert.deepEqual(payload.capabilities, ["agent_check_in_explanation"]);
+  assert.deepEqual(Object.keys(payload).sort(), [
+    "clientId",
+    "eventId",
+    "path",
+    "referrerOrigin",
+    "sdkVersion",
+    "sessionId",
+    "signals",
+  ]);
   assert.equal(
     payload.clientId,
     "rsp_0123456789abcdefghijklmnopqrstuv",
   );
-  assert.equal(payload.eventId, "39bb0340-379f-46ee-af2d-591d722f4798");
+  assert.equal(payload.eventId, EVENT_ID);
+  assert.equal(payload.sessionId, SESSION_ID);
   assert.equal(payload.path, "/pricing");
   assert.equal(payload.referrerOrigin, "https://search.example");
-  assert.equal(payload.signals.automationArtifactsDetected, false);
-  assert.equal("cdpRuntimeDetected" in payload.signals, false);
-  assert.equal(payload.signals.webdriver, true);
+  assert.deepEqual(payload.signals, {
+    automationArtifactsDetected: false,
+    webdriver: true,
+  });
   assert.equal(payload.sdkVersion, browserPackage.version);
   assert.equal(JSON.stringify(payload).includes("private@example.com"), false);
-  assert.equal(payload.version, 1);
 });
 
 test("does nothing without a valid public client ID", () => {

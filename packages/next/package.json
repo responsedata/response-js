@@ -2,7 +2,7 @@
   "name": "@responsedata/nextjs",
   "version": "0.1.8",
   "type": "module",
-  "description": "Next.js integration for Response agent analytics",
+  "description": "Next.js integration for Response traffic analytics",
   "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.js",

@@ -1,7 +1,8 @@
 # @responsedata/nextjs
 
-The Next.js integration for Response agent analytics. It tracks the initial
-page and App Router client-side pathname changes.
+The Next.js integration for Response traffic analytics. It tracks the initial
+page and App Router client-side pathname changes in a sessionStorage-derived
+browser session.
 
 ```sh
 npm install @responsedata/nextjs

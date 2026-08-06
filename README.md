@@ -1,9 +1,9 @@
 # Response JavaScript SDKs
 
-Open-source JavaScript SDKs and hosted browser script for Response agent
+Open-source JavaScript SDKs and hosted browser script for Response traffic
 analytics. The private Response application is maintained in a separate
-repository; this repository communicates with it only through the versioned
-collector contract.
+repository; this repository communicates with it through the collector
+contract.
 
 ## Repository layout
 
@@ -11,7 +11,7 @@ collector contract.
 - [`packages/next`](packages/next) publishes `@responsedata/nextjs`.
 - [`apps/cdn`](apps/cdn) builds and deploys the hosted browser script. It is an
   application workspace, not an npm package.
-- [`docs/collector-api-v1.md`](docs/collector-api-v1.md) defines the stable API
+- [`docs/collector-api.md`](docs/collector-api.md) defines the API
   boundary between these public SDKs and the private collector.
 
 ## Installation

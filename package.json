@@ -11,7 +11,6 @@
     "cdn:upload": "pnpm cdn:build && node scripts/upload-cdn.mjs",
     "cdn:upload:dry-run": "pnpm cdn:build && node scripts/upload-cdn.mjs --dry-run",
     "cdn:test": "pnpm cdn:build && pnpm --filter @responsedata/browser-cdn test",
-    "preview:interaction": "node scripts/preview-interaction.mjs",
     "release": "node scripts/create-release.mjs",
     "release:publish-local": "node scripts/publish-release-local.mjs",
     "release:publish-local:dry-run": "node scripts/publish-release-local.mjs --dry-run",

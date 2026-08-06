@@ -4,23 +4,33 @@ import test from "node:test";
 import { trackPageView } from "../dist/index.js";
 
 const CLIENT_ID = "rsp_0123456789abcdefghijklmnopqrstuv";
+const SESSION_ID = "11111111-1111-4111-8111-111111111111";
+const EVENT_ID = "22222222-2222-4222-8222-222222222222";
+const NEXT_EVENT_ID = "33333333-3333-4333-8333-333333333333";
 const browserPackage = JSON.parse(
   fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 );
 
 const installBrowserGlobals = ({
   automationArtifact = false,
-  fetchResponse,
   doNotTrack = null,
+  fetchResponse,
   globalPrivacyControl = false,
   legacyDoNotTrack = null,
   pathname = "/pricing",
   referrer = "https://search.example/results?q=private",
+  sessionEntries = [],
+  storageThrows = false,
+  uuids = [SESSION_ID, EVENT_ID, NEXT_EVENT_ID],
   webdriver = true,
+  webdriverThrows = false,
 } = {}) => {
-  let consoleDebugCalls = 0;
   const requests = [];
+  const storage = new Map(sessionEntries);
   const originalDescriptors = new Map();
+  let storageReads = 0;
+  let storageWrites = 0;
+  let uuidCalls = 0;
   const values = {
     crypto: {
       getRandomValues(bytes) {
@@ -28,15 +38,15 @@ const installBrowserGlobals = ({
         return bytes;
       },
       randomUUID() {
-        return "39bb0340-379f-46ee-af2d-591d722f4798";
+        const uuid = uuids[uuidCalls] ?? uuids.at(-1);
+        uuidCalls += 1;
+        return uuid;
       },
     },
-    console: {
-      debug() {
-        consoleDebugCalls += 1;
-      },
+    document: {
+      documentElement: { attributes: [] },
+      referrer,
     },
-    document: { referrer },
     doNotTrack: legacyDoNotTrack,
     fetch(url, init) {
       requests.push({ init, url });
@@ -48,13 +58,34 @@ const installBrowserGlobals = ({
     navigator: {
       doNotTrack,
       globalPrivacyControl,
-      userAgent:
-        "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/151.0.0.0 Safari/537.36",
       webdriver,
+    },
+    sessionStorage: {
+      getItem(key) {
+        storageReads += 1;
+        if (storageThrows) {
+          throw new Error("storage unavailable");
+        }
+        return storage.get(key) ?? null;
+      },
+      setItem(key, value) {
+        storageWrites += 1;
+        if (storageThrows) {
+          throw new Error("storage unavailable");
+        }
+        storage.set(key, value);
+      },
     },
   };
   if (automationArtifact) {
     values.__playwright__binding__ = () => undefined;
+  }
+  if (webdriverThrows) {
+    Object.defineProperty(values.navigator, "webdriver", {
+      get() {
+        throw new Error("webdriver unavailable");
+      },
+    });
   }
 
   for (const [key, value] of Object.entries(values)) {
@@ -67,10 +98,17 @@ const installBrowserGlobals = ({
   }
 
   return {
-    get consoleDebugCalls() {
-      return consoleDebugCalls;
-    },
     requests,
+    storage,
+    get storageReads() {
+      return storageReads;
+    },
+    get storageWrites() {
+      return storageWrites;
+    },
+    get uuidCalls() {
+      return uuidCalls;
+    },
     restore() {
       for (const [key, descriptor] of originalDescriptors) {
         if (descriptor) {
@@ -83,7 +121,7 @@ const installBrowserGlobals = ({
   };
 };
 
-test("queues a minimal page observation with the default collector", () => {
+test("queues a minimal page observation with a tab-scoped session", () => {
   const browser = installBrowserGlobals();
 
   try {
@@ -95,19 +133,86 @@ test("queues a minimal page observation with the default collector", () => {
     );
 
     const payload = JSON.parse(browser.requests[0].init.body);
+    assert.deepEqual(Object.keys(payload).sort(), [
+      "clientId",
+      "eventId",
+      "path",
+      "referrerOrigin",
+      "sdkVersion",
+      "sessionId",
+      "signals",
+    ]);
     assert.equal(payload.clientId, CLIENT_ID);
-    assert.deepEqual(payload.capabilities, ["agent_check_in_explanation"]);
+    assert.equal(payload.eventId, EVENT_ID);
+    assert.equal(payload.sessionId, SESSION_ID);
     assert.equal(payload.path, "/pricing");
     assert.equal(payload.referrerOrigin, "https://search.example");
-    assert.equal(payload.signals.automationArtifactsDetected, false);
-    assert.equal("cdpRuntimeDetected" in payload.signals, false);
-    assert.equal(payload.signals.webdriver, true);
-    assert.equal(browser.consoleDebugCalls, 0);
+    assert.deepEqual(payload.signals, {
+      automationArtifactsDetected: false,
+      webdriver: true,
+    });
     assert.equal(payload.sdkVersion, browserPackage.version);
+    assert.equal(JSON.stringify(payload).includes("private"), false);
     assert.equal(
-      JSON.stringify(payload).includes("private"),
-      false,
+      browser.storage.get(`response:session:${CLIENT_ID}`),
+      SESSION_ID,
     );
+  } finally {
+    browser.restore();
+  }
+});
+
+test("reuses one session across page views and keeps event IDs unique", () => {
+  const clientId = "rsp_1123456789abcdefghijklmnopqrstuv";
+  const browser = installBrowserGlobals({ pathname: "/initial" });
+
+  try {
+    assert.equal(trackPageView({ clientId, path: "/first" }), true);
+    assert.equal(trackPageView({ clientId, path: "/second" }), true);
+
+    const first = JSON.parse(browser.requests[0].init.body);
+    const second = JSON.parse(browser.requests[1].init.body);
+    assert.equal(first.sessionId, SESSION_ID);
+    assert.equal(second.sessionId, SESSION_ID);
+    assert.equal(first.eventId, EVENT_ID);
+    assert.equal(second.eventId, NEXT_EVENT_ID);
+    assert.equal(browser.storageWrites, 1);
+  } finally {
+    browser.restore();
+  }
+});
+
+test("uses an existing valid session ID", () => {
+  const clientId = "rsp_2123456789abcdefghijklmnopqrstuv";
+  const storedSessionId = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA";
+  const browser = installBrowserGlobals({
+    sessionEntries: [[`response:session:${clientId}`, storedSessionId]],
+    uuids: [EVENT_ID],
+  });
+
+  try {
+    assert.equal(trackPageView({ clientId }), true);
+    const payload = JSON.parse(browser.requests[0].init.body);
+    assert.equal(payload.sessionId, storedSessionId.toLowerCase());
+    assert.equal(payload.eventId, EVENT_ID);
+    assert.equal(browser.storageWrites, 0);
+    assert.equal(browser.uuidCalls, 1);
+  } finally {
+    browser.restore();
+  }
+});
+
+test("falls back to memory when session storage is unavailable", () => {
+  const clientId = "rsp_3123456789abcdefghijklmnopqrstuv";
+  const browser = installBrowserGlobals({ storageThrows: true });
+
+  try {
+    assert.equal(trackPageView({ clientId, path: "/first" }), true);
+    assert.equal(trackPageView({ clientId, path: "/second" }), true);
+    const first = JSON.parse(browser.requests[0].init.body);
+    const second = JSON.parse(browser.requests[1].init.body);
+    assert.equal(first.sessionId, SESSION_ID);
+    assert.equal(second.sessionId, SESSION_ID);
   } finally {
     browser.restore();
   }
@@ -121,9 +226,68 @@ test("reports known automation artifacts", () => {
   });
 
   try {
-    assert.equal(trackPageView({ clientId: CLIENT_ID }), true);
+    assert.equal(
+      trackPageView({
+        clientId: "rsp_4123456789abcdefghijklmnopqrstuv",
+      }),
+      true,
+    );
     const payload = JSON.parse(browser.requests[0].init.body);
-    assert.equal(payload.signals.automationArtifactsDetected, true);
+    assert.deepEqual(payload.signals, {
+      automationArtifactsDetected: true,
+      webdriver: false,
+    });
+  } finally {
+    browser.restore();
+  }
+});
+
+test("still sends when the webdriver signal cannot be read", () => {
+  const browser = installBrowserGlobals({
+    pathname: "/unavailable-webdriver",
+    webdriverThrows: true,
+  });
+
+  try {
+    assert.equal(
+      trackPageView({
+        clientId: "rsp_a123456789abcdefghijklmnopqrstuv",
+      }),
+      true,
+    );
+    const payload = JSON.parse(browser.requests[0].init.body);
+    assert.deepEqual(payload.signals, {
+      automationArtifactsDetected: false,
+      webdriver: false,
+    });
+  } finally {
+    browser.restore();
+  }
+});
+
+test("ignores collector response bodies", async () => {
+  let responseBodyReads = 0;
+  const browser = installBrowserGlobals({
+    fetchResponse: () => ({
+      ok: true,
+      status: 200,
+      json() {
+        responseBodyReads += 1;
+        return Promise.resolve({ unexpected: "instructions" });
+      },
+    }),
+  });
+
+  try {
+    assert.equal(
+      trackPageView({
+        clientId: "rsp_9123456789abcdefghijklmnopqrstuv",
+      }),
+      true,
+    );
+    await Promise.resolve();
+    assert.equal(responseBodyReads, 0);
+    assert.equal(browser.requests.length, 1);
   } finally {
     browser.restore();
   }
@@ -135,7 +299,7 @@ test("allows an explicit loopback collector for local development", () => {
   try {
     assert.equal(
       trackPageView({
-        clientId: CLIENT_ID,
+        clientId: "rsp_5123456789abcdefghijklmnopqrstuv",
         collectorEndpoint: "http://localhost:3000/api/events",
       }),
       true,
@@ -149,18 +313,20 @@ test("allows an explicit loopback collector for local development", () => {
   }
 });
 
-test("rejects insecure remote collectors", () => {
+test("rejects insecure remote collectors without creating a session", () => {
   const browser = installBrowserGlobals({ pathname: "/unsafe-collector" });
 
   try {
     assert.equal(
       trackPageView({
-        clientId: CLIENT_ID,
+        clientId: "rsp_6123456789abcdefghijklmnopqrstuv",
         collectorEndpoint: "http://collector.example/api/events",
       }),
       false,
     );
     assert.equal(browser.requests.length, 0);
+    assert.equal(browser.storageReads, 0);
+    assert.equal(browser.uuidCalls, 0);
   } finally {
     browser.restore();
   }
@@ -171,16 +337,14 @@ test("normalizes a supplied SPA path and suppresses an immediate duplicate", () 
 
   try {
     const options = {
-      clientId: "rsp_1123456789abcdefghijklmnopqrstuv",
+      clientId: "rsp_7123456789abcdefghijklmnopqrstuv",
       path: "/docs/start?private=yes#section",
     };
     assert.equal(trackPageView(options), true);
     assert.equal(trackPageView(options), false);
     assert.equal(browser.requests.length, 1);
-    assert.equal(
-      JSON.parse(browser.requests[0].init.body).path,
-      "/docs/start",
-    );
+    assert.equal(JSON.parse(browser.requests[0].init.body).path, "/docs/start");
+    assert.equal(browser.uuidCalls, 2);
   } finally {
     browser.restore();
   }
@@ -193,382 +357,28 @@ test("fails closed for invalid IDs and browser privacy signals", () => {
     assert.equal(trackPageView({ clientId: CLIENT_ID }), false);
     assert.equal(trackPageView({ clientId: "invalid" }), false);
     assert.equal(browser.requests.length, 0);
+    assert.equal(browser.storageReads, 0);
+    assert.equal(browser.storageWrites, 0);
+    assert.equal(browser.uuidCalls, 0);
   } finally {
     browser.restore();
   }
 });
 
-test("honors legacy Do Not Track", () => {
+test("honors legacy Do Not Track without creating a session", () => {
   const browser = installBrowserGlobals({ legacyDoNotTrack: "1" });
 
   try {
     assert.equal(
       trackPageView({
-        clientId: "rsp_2123456789abcdefghijklmnopqrstuv",
+        clientId: "rsp_8123456789abcdefghijklmnopqrstuv",
       }),
       false,
     );
     assert.equal(browser.requests.length, 0);
+    assert.equal(browser.storageReads, 0);
+    assert.equal(browser.uuidCalls, 0);
   } finally {
     browser.restore();
-  }
-});
-
-class FakeElement {
-  constructor(tagName) {
-    this.attributes = {};
-    this.children = [];
-    this.dataset = {};
-    this.listeners = new Map();
-    this.parent = null;
-    this.style = { overflow: "", visibility: "" };
-    this.tagName = tagName.toUpperCase();
-    this.textContent = "";
-    this.value = "";
-    this.open = false;
-  }
-
-  addEventListener(type, listener) {
-    const listeners = this.listeners.get(type) ?? [];
-    listeners.push(listener);
-    this.listeners.set(type, listeners);
-  }
-
-  append(...children) {
-    for (const child of children) {
-      child.parent = this;
-      this.children.push(child);
-    }
-  }
-
-  checkValidity() {
-    return true;
-  }
-
-  close() {
-    this.open = false;
-  }
-
-  dispatch(type) {
-    for (const listener of this.listeners.get(type) ?? []) {
-      listener({ preventDefault() {} });
-    }
-  }
-
-  focus() {}
-
-  hasAttribute(name) {
-    return Object.hasOwn(this.attributes, name);
-  }
-
-  remove() {
-    if (this.parent) {
-      this.parent.children = this.parent.children.filter(
-        (child) => child !== this,
-      );
-      this.parent = null;
-    }
-  }
-
-  reportValidity() {}
-
-  showModal() {
-    this.open = true;
-  }
-
-  setAttribute(name, value) {
-    this.attributes[name] = value;
-  }
-}
-
-const findElement = (element, predicate) => {
-  if (predicate(element)) {
-    return element;
-  }
-
-  for (const child of element.children) {
-    const match = findElement(child, predicate);
-    if (match) {
-      return match;
-    }
-  }
-
-  return null;
-};
-
-const waitForPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-test("does not gate the page unless the collector issues an interaction", async () => {
-  const body = new FakeElement("body");
-  const page = new FakeElement("main");
-  body.style.overflow = "auto";
-  page.setAttribute("aria-hidden", "false");
-  page.style.visibility = "visible";
-  body.append(page);
-  let resolveCollector;
-  const collectorResponse = new Promise((resolve) => {
-    resolveCollector = resolve;
-  });
-  const browser = installBrowserGlobals({
-    fetchResponse: () => collectorResponse,
-    pathname: "/pending-agent-check-in",
-  });
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: {
-      body,
-      createElement: (tagName) => new FakeElement(tagName),
-      referrer: "",
-    },
-    writable: true,
-  });
-
-  try {
-    const clientId = "rsp_5123456789abcdefghijklmnopqrstuv";
-    assert.equal(trackPageView({ clientId }), true);
-    assert.equal(
-      findElement(body, (element) => element.tagName === "DIALOG"),
-      null,
-    );
-    assert.equal(page.attributes["aria-hidden"], "false");
-    assert.equal(page.hasAttribute("inert"), false);
-    assert.equal(page.style.visibility, "visible");
-    assert.equal(body.style.overflow, "auto");
-
-    resolveCollector({ ok: true, status: 204 });
-    await waitForPromises();
-    assert.deepEqual(body.children, [page]);
-  } finally {
-    browser.restore();
-  }
-});
-
-test("renders and submits an agent check-in, then suppresses it for the tab", async () => {
-  const interactionId = "9f4b8da9-8fc4-4ceb-8124-9da1461b780e";
-  const body = new FakeElement("body");
-  const page = new FakeElement("main");
-  body.style.overflow = "auto";
-  page.setAttribute("aria-hidden", "false");
-  page.style.visibility = "visible";
-  body.append(page);
-  const storage = new Map();
-  const originalSessionStorageDescriptor = Object.getOwnPropertyDescriptor(
-    globalThis,
-    "sessionStorage",
-  );
-  const browser = installBrowserGlobals({
-    fetchResponse(url) {
-      return url.endsWith("/api/events")
-        ? {
-            ok: true,
-            status: 200,
-            json: async () => ({
-              interaction: {
-                agentName: "ChatGPT",
-                id: interactionId,
-                type: "agent_check_in",
-              },
-            }),
-          }
-        : { ok: true, status: 204 };
-    },
-    pathname: "/agent-test",
-  });
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: {
-      body,
-      createElement: (tagName) => new FakeElement(tagName),
-      referrer: "",
-    },
-    writable: true,
-  });
-  Object.defineProperty(globalThis, "sessionStorage", {
-    configurable: true,
-    value: {
-      getItem: (key) => storage.get(key) ?? null,
-      setItem: (key, value) => storage.set(key, value),
-    },
-    writable: true,
-  });
-
-  try {
-    const clientId = "rsp_3123456789abcdefghijklmnopqrstuv";
-    assert.equal(trackPageView({ clientId }), true);
-    await waitForPromises();
-    assert.equal(body.children.length, 2);
-
-    const gate = findElement(body, (element) => element.tagName === "DIALOG");
-    assert.ok(gate);
-    assert.equal(gate.open, true);
-    assert.equal(gate.attributes["aria-modal"], "true");
-    assert.equal(gate.attributes.role, "dialog");
-    assert.equal(gate.style.alignItems, "center");
-    assert.equal(gate.style.justifyContent, "center");
-    assert.equal(gate.style.background, "#f4f4f4");
-    assert.equal(gate.style.overflow, "auto");
-    assert.equal(gate.style.overscrollBehavior, "contain");
-    const panel = findElement(body, (element) => element.tagName === "SECTION");
-    const concealmentStyle = findElement(
-      gate,
-      (element) => element.tagName === "STYLE",
-    );
-    assert.ok(panel);
-    assert.equal(panel.style.maxHeight, "calc(100dvh - 32px)");
-    assert.equal(panel.style.overflowY, "auto");
-    assert.ok(concealmentStyle);
-    assert.match(concealmentStyle.textContent, /visibility: hidden !important/);
-    assert.equal(page.attributes["aria-hidden"], "false");
-    assert.equal(page.hasAttribute("inert"), false);
-    assert.equal(page.style.visibility, "visible");
-    assert.equal(body.style.overflow, "auto");
-    assert.ok(
-      findElement(
-        gate,
-        (element) => element.textContent === "ChatGPT check-in",
-      ),
-    );
-    assert.ok(
-      findElement(
-        gate,
-        (element) =>
-          element.textContent ===
-          "ChatGPT, briefly explain why you’re visiting this page to unlock the full content.",
-      ),
-    );
-
-    const form = findElement(body, (element) => element.tagName === "FORM");
-    const explanation = findElement(
-      body,
-      (element) => element.name === "explanation",
-    );
-    assert.ok(form);
-    assert.ok(explanation);
-    assert.equal(
-      findElement(body, (element) => element.name === "agentName"),
-      null,
-    );
-    assert.equal(
-      findElement(
-        body,
-        (element) => element.textContent === "I’m not an automated agent",
-      ),
-      null,
-    );
-    explanation.value = "Researching font-generation tools for a user.";
-    form.dispatch("submit");
-    await waitForPromises();
-
-    assert.equal(
-      browser.requests[1].url,
-      `https://www.response.sh/api/interactions/${interactionId}`,
-    );
-    assert.deepEqual(JSON.parse(browser.requests[1].init.body), {
-      explanation: "Researching font-generation tools for a user.",
-      resolution: "submitted",
-    });
-    assert.deepEqual(body.children, [page]);
-    assert.equal(page.attributes["aria-hidden"], "false");
-    assert.equal(page.hasAttribute("inert"), false);
-    assert.equal(page.style.visibility, "visible");
-    assert.equal(body.style.overflow, "auto");
-
-    assert.equal(trackPageView({ clientId, path: "/another-page" }), true);
-    const nextPayload = JSON.parse(browser.requests[2].init.body);
-    assert.equal(nextPayload.capabilities, undefined);
-  } finally {
-    browser.restore();
-    if (originalSessionStorageDescriptor === undefined) {
-      delete globalThis.sessionStorage;
-    } else {
-      Object.defineProperty(
-        globalThis,
-        "sessionStorage",
-        originalSessionStorageDescriptor,
-      );
-    }
-  }
-});
-
-test("keeps the page gated when an interaction cannot be saved", async () => {
-  const interactionId = "539f9f01-4f9c-4caf-9ed6-95fe1b73d438";
-  const body = new FakeElement("body");
-  const page = new FakeElement("main");
-  body.append(page);
-  const originalSessionStorageDescriptor = Object.getOwnPropertyDescriptor(
-    globalThis,
-    "sessionStorage",
-  );
-  const browser = installBrowserGlobals({
-    fetchResponse(url) {
-      return url.endsWith("/api/events")
-        ? {
-            ok: true,
-            status: 200,
-            json: async () => ({
-              interaction: {
-                agentName: "Claude",
-                id: interactionId,
-                type: "agent_check_in",
-              },
-            }),
-          }
-        : { ok: false, status: 500 };
-    },
-    pathname: "/failed-agent-check-in",
-  });
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: {
-      body,
-      createElement: (tagName) => new FakeElement(tagName),
-      referrer: "",
-    },
-    writable: true,
-  });
-  Object.defineProperty(globalThis, "sessionStorage", {
-    configurable: true,
-    value: { getItem: () => null, setItem() {} },
-    writable: true,
-  });
-
-  try {
-    const clientId = "rsp_4123456789abcdefghijklmnopqrstuv";
-    assert.equal(trackPageView({ clientId }), true);
-    await waitForPromises();
-
-    const form = findElement(body, (element) => element.tagName === "FORM");
-    const explanation = findElement(
-      body,
-      (element) => element.name === "explanation",
-    );
-    const status = findElement(
-      body,
-      (element) => element.attributes["aria-live"] === "polite",
-    );
-    assert.ok(form);
-    assert.ok(explanation);
-    assert.ok(status);
-    explanation.value = "Testing a required interaction gate.";
-    form.dispatch("submit");
-    await waitForPromises();
-
-    assert.ok(findElement(body, (element) => element.tagName === "DIALOG"));
-    assert.equal(explanation.disabled, false);
-    assert.equal(page.hasAttribute("aria-hidden"), false);
-    assert.equal(page.hasAttribute("inert"), false);
-    assert.equal(page.style.visibility, "");
-    assert.match(status.textContent, /couldn’t be saved/i);
-  } finally {
-    browser.restore();
-    if (originalSessionStorageDescriptor === undefined) {
-      delete globalThis.sessionStorage;
-    } else {
-      Object.defineProperty(
-        globalThis,
-        "sessionStorage",
-        originalSessionStorageDescriptor,
-      );
-    }
   }
 });

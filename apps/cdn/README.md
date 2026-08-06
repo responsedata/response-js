@@ -2,6 +2,9 @@
 
 This non-publishable workspace produces the browser script served from
 `cdn.response.sh`. The same source and version are used by the npm packages.
+The script passively sends page views with a per-client,
+sessionStorage-derived browser session ID. It does not parse collector
+responses or render UI on the host page.
 
 ## Asset policy
 
