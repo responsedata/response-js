@@ -189,6 +189,9 @@ try {
       "GitHub Actions is now publishing the npm packages and CDN assets:",
     );
     console.log("https://github.com/responsedata/response-js/actions");
+    console.log(
+      `If the release workflow is unavailable, run: pnpm release:publish-local ${releaseTag}`,
+    );
   } catch (error) {
     if (!releaseCommitted) {
       run("git", [
