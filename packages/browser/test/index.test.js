@@ -96,7 +96,7 @@ test("queues a minimal page observation with the default collector", () => {
 
     const payload = JSON.parse(browser.requests[0].init.body);
     assert.equal(payload.clientId, CLIENT_ID);
-    assert.deepEqual(payload.capabilities, ["agent_check_in"]);
+    assert.deepEqual(payload.capabilities, ["agent_check_in_explanation"]);
     assert.equal(payload.path, "/pricing");
     assert.equal(payload.referrerOrigin, "https://search.example");
     assert.equal(payload.signals.automationArtifactsDetected, false);
@@ -221,7 +221,7 @@ class FakeElement {
     this.dataset = {};
     this.listeners = new Map();
     this.parent = null;
-    this.style = {};
+    this.style = { overflow: "", visibility: "" };
     this.tagName = tagName.toUpperCase();
     this.textContent = "";
     this.value = "";
@@ -245,6 +245,10 @@ class FakeElement {
     return true;
   }
 
+  close() {
+    this.open = false;
+  }
+
   dispatch(type) {
     for (const listener of this.listeners.get(type) ?? []) {
       listener({ preventDefault() {} });
@@ -252,6 +256,10 @@ class FakeElement {
   }
 
   focus() {}
+
+  hasAttribute(name) {
+    return Object.hasOwn(this.attributes, name);
+  }
 
   remove() {
     if (this.parent) {
@@ -290,9 +298,12 @@ const findElement = (element, predicate) => {
 
 const waitForPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("renders a blocking pending gate before the collector responds", async () => {
+test("does not gate the page unless the collector issues an interaction", async () => {
   const body = new FakeElement("body");
   const page = new FakeElement("main");
+  body.style.overflow = "auto";
+  page.setAttribute("aria-hidden", "false");
+  page.style.visibility = "visible";
   body.append(page);
   let resolveCollector;
   const collectorResponse = new Promise((resolve) => {
@@ -315,22 +326,14 @@ test("renders a blocking pending gate before the collector responds", async () =
   try {
     const clientId = "rsp_5123456789abcdefghijklmnopqrstuv";
     assert.equal(trackPageView({ clientId }), true);
-
-    const gate = findElement(body, (element) => element.tagName === "DIALOG");
-    assert.ok(gate);
-    assert.equal(gate.open, true);
-    assert.ok(
-      findElement(
-        gate,
-        (element) => element.textContent === "Agent check-in required",
-      ),
+    assert.equal(
+      findElement(body, (element) => element.tagName === "DIALOG"),
+      null,
     );
-    assert.ok(
-      findElement(
-        gate,
-        (element) => element.textContent === "Preparing check-in…",
-      ),
-    );
+    assert.equal(page.attributes["aria-hidden"], "false");
+    assert.equal(page.hasAttribute("inert"), false);
+    assert.equal(page.style.visibility, "visible");
+    assert.equal(body.style.overflow, "auto");
 
     resolveCollector({ ok: true, status: 204 });
     await waitForPromises();
@@ -344,6 +347,9 @@ test("renders and submits an agent check-in, then suppresses it for the tab", as
   const interactionId = "9f4b8da9-8fc4-4ceb-8124-9da1461b780e";
   const body = new FakeElement("body");
   const page = new FakeElement("main");
+  body.style.overflow = "auto";
+  page.setAttribute("aria-hidden", "false");
+  page.style.visibility = "visible";
   body.append(page);
   const storage = new Map();
   const originalSessionStorageDescriptor = Object.getOwnPropertyDescriptor(
@@ -357,7 +363,11 @@ test("renders and submits an agent check-in, then suppresses it for the tab", as
             ok: true,
             status: 200,
             json: async () => ({
-              interaction: { id: interactionId, type: "agent_check_in" },
+              interaction: {
+                agentName: "ChatGPT",
+                id: interactionId,
+                type: "agent_check_in",
+              },
             }),
           }
         : { ok: true, status: 204 };
@@ -393,15 +403,59 @@ test("renders and submits an agent check-in, then suppresses it for the tab", as
     assert.equal(gate.open, true);
     assert.equal(gate.attributes["aria-modal"], "true");
     assert.equal(gate.attributes.role, "dialog");
+    assert.equal(gate.style.alignItems, "center");
+    assert.equal(gate.style.justifyContent, "center");
+    assert.equal(gate.style.background, "#f4f4f4");
+    assert.equal(gate.style.overflow, "auto");
+    assert.equal(gate.style.overscrollBehavior, "contain");
+    const panel = findElement(body, (element) => element.tagName === "SECTION");
+    const concealmentStyle = findElement(
+      gate,
+      (element) => element.tagName === "STYLE",
+    );
+    assert.ok(panel);
+    assert.equal(panel.style.maxHeight, "calc(100dvh - 32px)");
+    assert.equal(panel.style.overflowY, "auto");
+    assert.ok(concealmentStyle);
+    assert.match(concealmentStyle.textContent, /visibility: hidden !important/);
+    assert.equal(page.attributes["aria-hidden"], "false");
+    assert.equal(page.hasAttribute("inert"), false);
+    assert.equal(page.style.visibility, "visible");
+    assert.equal(body.style.overflow, "auto");
+    assert.ok(
+      findElement(
+        gate,
+        (element) => element.textContent === "ChatGPT check-in",
+      ),
+    );
+    assert.ok(
+      findElement(
+        gate,
+        (element) =>
+          element.textContent ===
+          "ChatGPT, briefly explain why you’re visiting this page to unlock the full content.",
+      ),
+    );
 
     const form = findElement(body, (element) => element.tagName === "FORM");
-    const agentName = findElement(body, (element) => element.name === "agentName");
-    const message = findElement(body, (element) => element.name === "message");
+    const explanation = findElement(
+      body,
+      (element) => element.name === "explanation",
+    );
     assert.ok(form);
-    assert.ok(agentName);
-    assert.ok(message);
-    agentName.value = "ChatGPT";
-    message.value = "Researching font-generation tools for a user.";
+    assert.ok(explanation);
+    assert.equal(
+      findElement(body, (element) => element.name === "agentName"),
+      null,
+    );
+    assert.equal(
+      findElement(
+        body,
+        (element) => element.textContent === "I’m not an automated agent",
+      ),
+      null,
+    );
+    explanation.value = "Researching font-generation tools for a user.";
     form.dispatch("submit");
     await waitForPromises();
 
@@ -410,11 +464,14 @@ test("renders and submits an agent check-in, then suppresses it for the tab", as
       `https://www.response.sh/api/interactions/${interactionId}`,
     );
     assert.deepEqual(JSON.parse(browser.requests[1].init.body), {
-      agentName: "ChatGPT",
-      message: "Researching font-generation tools for a user.",
+      explanation: "Researching font-generation tools for a user.",
       resolution: "submitted",
     });
     assert.deepEqual(body.children, [page]);
+    assert.equal(page.attributes["aria-hidden"], "false");
+    assert.equal(page.hasAttribute("inert"), false);
+    assert.equal(page.style.visibility, "visible");
+    assert.equal(body.style.overflow, "auto");
 
     assert.equal(trackPageView({ clientId, path: "/another-page" }), true);
     const nextPayload = JSON.parse(browser.requests[2].init.body);
@@ -436,6 +493,8 @@ test("renders and submits an agent check-in, then suppresses it for the tab", as
 test("keeps the page gated when an interaction cannot be saved", async () => {
   const interactionId = "539f9f01-4f9c-4caf-9ed6-95fe1b73d438";
   const body = new FakeElement("body");
+  const page = new FakeElement("main");
+  body.append(page);
   const originalSessionStorageDescriptor = Object.getOwnPropertyDescriptor(
     globalThis,
     "sessionStorage",
@@ -447,7 +506,11 @@ test("keeps the page gated when an interaction cannot be saved", async () => {
             ok: true,
             status: 200,
             json: async () => ({
-              interaction: { id: interactionId, type: "agent_check_in" },
+              interaction: {
+                agentName: "Claude",
+                id: interactionId,
+                type: "agent_check_in",
+              },
             }),
           }
         : { ok: false, status: 500 };
@@ -475,24 +538,26 @@ test("keeps the page gated when an interaction cannot be saved", async () => {
     await waitForPromises();
 
     const form = findElement(body, (element) => element.tagName === "FORM");
-    const agentName = findElement(body, (element) => element.name === "agentName");
-    const message = findElement(body, (element) => element.name === "message");
+    const explanation = findElement(
+      body,
+      (element) => element.name === "explanation",
+    );
     const status = findElement(
       body,
       (element) => element.attributes["aria-live"] === "polite",
     );
     assert.ok(form);
-    assert.ok(agentName);
-    assert.ok(message);
+    assert.ok(explanation);
     assert.ok(status);
-    agentName.value = "Codex";
-    message.value = "Testing a required interaction gate.";
+    explanation.value = "Testing a required interaction gate.";
     form.dispatch("submit");
     await waitForPromises();
 
     assert.ok(findElement(body, (element) => element.tagName === "DIALOG"));
-    assert.equal(agentName.disabled, false);
-    assert.equal(message.disabled, false);
+    assert.equal(explanation.disabled, false);
+    assert.equal(page.hasAttribute("aria-hidden"), false);
+    assert.equal(page.hasAttribute("inert"), false);
+    assert.equal(page.style.visibility, "");
     assert.match(status.textContent, /couldn’t be saved/i);
   } finally {
     browser.restore();

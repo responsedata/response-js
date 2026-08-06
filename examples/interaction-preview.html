@@ -64,8 +64,8 @@
       <h1>Agent check-in preview</h1>
       <p>
         This page runs the real browser SDK against local mock responses. It
-        never sends data to the Response server. Complete or bypass the form to
-        inspect the resolution below.
+        never sends data to the Response server. Submit the personalized form
+        to inspect the explanation payload below.
       </p>
       <button id="show-interaction" type="button">Show agent check-in</button>
       <pre id="request-log" aria-live="polite">Starting preview…</pre>
@@ -94,6 +94,7 @@
           return Response.json(
             {
               interaction: {
+                agentName: "ChatGPT",
                 id: crypto.randomUUID(),
                 type: "agent_check_in",
               },

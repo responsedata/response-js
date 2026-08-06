@@ -8,7 +8,7 @@ CORS preflight and currently contains:
 
 ```json
 {
-  "capabilities": ["agent_check_in"],
+  "capabilities": ["agent_check_in_explanation"],
   "clientId": "rsp_...",
   "eventId": "uuid",
   "path": "/page",
@@ -31,40 +31,72 @@ Previously released SDKs may also send the optional boolean
 `cdpRuntimeDetected`. The collector accepts that legacy field for version 1
 compatibility but discards it and does not use it for classification.
 
-`capabilities` is optional. The current SDK includes `agent_check_in` while it
-can render an interaction. Older SDKs omit the field and retain their existing
-fire-and-forget behavior.
+`capabilities` is optional. The current SDK includes
+`agent_check_in_explanation` while it can render the personalized,
+explanation-only interaction. The collector still accepts the previous
+`agent_check_in` capability but does not issue its legacy form. Older SDKs that
+omit the field retain their existing fire-and-forget behavior.
 
-The collector normally returns `204 No Content`. When an automated visit should
-check in and the SDK declares support, it returns `200` with:
+The collector normally returns `204 No Content`. It accepts and records a visit
+only when the request user agent contains one of the supported user-triggered
+agent products:
+
+- `Agent/AmazonBuyForMe`, `Amzn-User`, `ChatGPT-User`, `Claude-User`, `Devin`
+- `DuckAssistBot`, `FirecrawlAgent`, `Google-Agent`, `Google-GeminiNotebook`
+- `Google-NotebookLM`, `Kimi-User`, `Meta-ExternalFetcher`, `MistralAI-User`
+- `Perplexity-User`, `QwenCode`, `Shap-User`, and `TwinAgent`
+
+Browser automation signals, generic crawler user agents, and guessed product
+names do not qualify. MiniMax and Exa are intentionally absent because neither
+publishes a stable outbound product user-agent. `FirecrawlAgent` is recognized
+only when a request actually uses that identity; Firecrawl can also use
+ordinary or custom browser user-agents.
+
+This is cooperative product recognition, not cryptographic authentication: a
+user-agent value can be spoofed. It also applies only when the visitor executes
+the host page's JavaScript and allows the SDK request; fetch-only agents cannot
+receive a client-rendered interaction.
+
+When a recognized agent declares check-in support, the collector returns `200`
+with a server-derived display name:
 
 ```json
 {
   "interaction": {
+    "agentName": "ChatGPT",
     "id": "uuid",
     "type": "agent_check_in"
   }
 }
 ```
 
-When client-side automation evidence is already available, the SDK immediately
-renders a required pending modal while the collector evaluates the request. It
-replaces that modal with the fixed check-in form when the collector returns an
-interaction, or removes it when the request is declined. The form resolves at
-`POST https://www.response.sh/api/interactions/{id}`. The page remains
-inaccessible until that endpoint accepts either resolution. A submitted
-check-in is:
+The SDK does not pre-gate from client-side heuristics. It renders the required,
+personalized check-in only after the collector issues an interaction. The form
+resolves at `POST https://www.response.sh/api/interactions/{id}`, and the page
+remains inaccessible until the endpoint accepts an explanation:
 
 ```json
 {
   "resolution": "submitted",
-  "agentName": "ChatGPT",
-  "message": "Researching font-generation tools for a user."
+  "explanation": "Researching font-generation tools for a user."
 }
 ```
 
-The explicit human escape hatch sends `{ "resolution": "human_bypass" }`.
-Resolution payloads are also sent as `text/plain;charset=UTF-8`.
+The agent identity is never accepted from this payload. It is re-derived from
+the original event request before the explanation is stored. The collector
+temporarily accepts the previous SDK's `agentName` and `message` submission
+shape during rollout, ignores the supplied name, and stores `message` as the
+explanation. Human bypass resolutions are not accepted. Resolution payloads are
+also sent as `text/plain;charset=UTF-8`.
+
+For the lifetime of an issued interaction, a native modal makes the rest of the
+document non-interactive. An opaque full-page surface and dialog-scoped style
+visually hide other top-level body content, including content appended later.
+Removing the accepted dialog removes that style without mutating the host
+application's DOM state. This is a client-side interaction gate, not a
+content-security boundary: the document and its resources have already been
+delivered and remain inspectable. A true content gate must run in the host
+website's server or edge middleware before the full response is sent.
 
 ## Compatibility policy
 

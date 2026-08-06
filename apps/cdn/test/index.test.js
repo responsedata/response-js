@@ -86,7 +86,7 @@ test("sends one minimal observation to the stable collector", () => {
   );
 
   const payload = JSON.parse(requests[0].init.body);
-  assert.deepEqual(payload.capabilities, ["agent_check_in"]);
+  assert.deepEqual(payload.capabilities, ["agent_check_in_explanation"]);
   assert.equal(
     payload.clientId,
     "rsp_0123456789abcdefghijklmnopqrstuv",
