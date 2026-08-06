@@ -20,9 +20,9 @@ during server rendering; browser globals are accessed only when the function is
 called. Custom collectors must use HTTPS, except for loopback development
 addresses.
 
-The SDK reports `navigator.webdriver` and a small console-serialization probe
-for browser instrumentation. The probe sends only a boolean; it does not collect
-console contents, page contents, or a browser fingerprint.
+The SDK reports `navigator.webdriver` and the presence of known automation
+globals or document attributes. It sends only booleans; it does not collect
+the matching names, console contents, page contents, or a browser fingerprint.
 
 When Response identifies likely automated traffic, the SDK displays a required
 native modal asking for the agent or service name and its reason for visiting.

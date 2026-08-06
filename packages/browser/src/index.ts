@@ -45,6 +45,10 @@ let activeInteraction: {
   id: string;
   interactionsEndpoint: string;
 } | null = null;
+let pendingInteractionGate: {
+  clientId: string;
+  root: HTMLDialogElement;
+} | null = null;
 const pendingInteractionClients = new Set<string>();
 
 const trackingAllowed = () => {
@@ -157,6 +161,7 @@ const rememberInteractionResolution = (clientId: string) => {
 
 const canRequestAgentCheckIn = (clientId: string) =>
   activeInteraction === null &&
+  pendingInteractionGate === null &&
   !pendingInteractionClients.has(clientId) &&
   !interactionWasResolved(clientId);
 
@@ -229,6 +234,118 @@ const addButtonHoverState = (
   });
 };
 
+const createAgentCheckInRoot = () => {
+  const root = document.createElement("dialog");
+  root.dataset.responseInteraction = "agent_check_in";
+  root.setAttribute("aria-describedby", "response-agent-check-in-description");
+  root.setAttribute("aria-labelledby", "response-agent-check-in-title");
+  root.setAttribute("aria-modal", "true");
+  root.setAttribute("role", "dialog");
+  applyStyles(root, {
+    alignItems: "flex-end",
+    background: "rgba(17, 17, 17, 0.24)",
+    border: "0",
+    boxSizing: "border-box",
+    display: "flex",
+    height: "100dvh",
+    inset: "0",
+    justifyContent: "flex-end",
+    margin: "0",
+    maxHeight: "none",
+    maxWidth: "none",
+    padding: "16px",
+    position: "fixed",
+    width: "100vw",
+    zIndex: "2147483647",
+  });
+  root.addEventListener("cancel", (event) => {
+    event.preventDefault();
+  });
+  return root;
+};
+
+const createAgentCheckInPanel = () => {
+  const panel = document.createElement("section");
+  applyStyles(panel, {
+    background: "#ffffff",
+    borderRadius: "14px",
+    boxShadow: "none",
+    boxSizing: "border-box",
+    color: "#111111",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+    fontSize: "14px",
+    lineHeight: "1.5",
+    maxWidth: "390px",
+    padding: "20px 20px 12px",
+    width: "100%",
+  });
+  return panel;
+};
+
+const mountAgentCheckInRoot = (root: HTMLDialogElement) => {
+  document.body.append(root);
+  if (typeof root.showModal === "function") {
+    root.showModal();
+  } else {
+    root.setAttribute("open", "");
+  }
+};
+
+const clearPendingAgentCheckIn = (clientId: string) => {
+  if (pendingInteractionGate?.clientId !== clientId) {
+    return;
+  }
+
+  pendingInteractionGate.root.remove();
+  pendingInteractionGate = null;
+};
+
+const renderPendingAgentCheckIn = (clientId: string) => {
+  if (
+    !document.body ||
+    activeInteraction !== null ||
+    pendingInteractionGate !== null
+  ) {
+    return;
+  }
+
+  const root = createAgentCheckInRoot();
+  const panel = createAgentCheckInPanel();
+  const title = createText("h2", "Agent check-in required");
+  title.id = "response-agent-check-in-title";
+  applyStyles(title, {
+    fontFamily:
+      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+    fontSize: "17px",
+    fontWeight: "500",
+    lineHeight: "1.2",
+    margin: "0 0 7px",
+  });
+  const description = createText(
+    "p",
+    "This page is locked while Response prepares the required automated visitor check-in.",
+  );
+  description.id = "response-agent-check-in-description";
+  applyStyles(description, {
+    color: "#666666",
+    fontSize: "14px",
+    lineHeight: "1.5",
+    margin: "0 0 8px",
+  });
+  const status = createText("p", "Preparing check-in…");
+  status.setAttribute("aria-live", "polite");
+  applyStyles(status, {
+    color: "#666666",
+    fontSize: "12px",
+    margin: "0",
+  });
+
+  panel.append(title, description, status);
+  root.append(panel);
+  pendingInteractionGate = { clientId, root };
+  mountAgentCheckInRoot(root);
+};
+
 const submitResolution = async (
   interactionsEndpoint: string,
   interactionId: string,
@@ -262,47 +379,8 @@ const renderAgentCheckIn = (
   }
 
   activeInteraction = { clientId, id: interaction.id, interactionsEndpoint };
-  const root = document.createElement("dialog");
-  root.dataset.responseInteraction = "agent_check_in";
-  root.setAttribute("aria-describedby", "response-agent-check-in-description");
-  root.setAttribute("aria-labelledby", "response-agent-check-in-title");
-  root.setAttribute("aria-modal", "true");
-  root.setAttribute("role", "dialog");
-  applyStyles(root, {
-    alignItems: "flex-end",
-    background: "rgba(17, 17, 17, 0.24)",
-    border: "0",
-    boxSizing: "border-box",
-    display: "flex",
-    height: "100dvh",
-    inset: "0",
-    justifyContent: "flex-end",
-    margin: "0",
-    maxHeight: "none",
-    maxWidth: "none",
-    padding: "16px",
-    position: "fixed",
-    width: "100vw",
-    zIndex: "2147483647",
-  });
-  root.addEventListener("cancel", (event) => {
-    event.preventDefault();
-  });
-
-  const panel = document.createElement("section");
-  applyStyles(panel, {
-    background: "#ffffff",
-    borderRadius: "14px",
-    boxShadow: "none",
-    boxSizing: "border-box",
-    color: "#111111",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-    fontSize: "14px",
-    lineHeight: "1.5",
-    maxWidth: "390px",
-    padding: "20px 20px 12px",
-    width: "100%",
-  });
+  const root = createAgentCheckInRoot();
+  const panel = createAgentCheckInPanel();
 
   const title = createText("h2", "Agent check-in required");
   title.id = "response-agent-check-in-title";
@@ -521,12 +599,7 @@ const renderAgentCheckIn = (
   form.append(agentNameLabel, agentName, messageLabel, message, status, actions);
   panel.append(title, description, form);
   root.append(panel);
-  document.body.append(root);
-  if (typeof root.showModal === "function") {
-    root.showModal();
-  } else {
-    root.setAttribute("open", "");
-  }
+  mountAgentCheckInRoot(root);
   setTimeout(() => agentName.focus(), 0);
 };
 
@@ -536,40 +609,53 @@ const handleCollectorResponse = async (
   interactionsEndpoint: string,
 ) => {
   if (response.status !== 200) {
+    clearPendingAgentCheckIn(clientId);
     return;
   }
 
   const body = await response.json().catch(() => null);
   const interaction = parseAgentCheckIn(body);
+  clearPendingAgentCheckIn(clientId);
   if (interaction) {
     renderAgentCheckIn(clientId, interaction, interactionsEndpoint);
   }
 };
 
-const detectCdpRuntime = () => {
+const detectAutomationArtifacts = () => {
   try {
-    if (typeof console === "undefined" || typeof console.debug !== "function") {
-      return false;
-    }
+    const automationPattern =
+      /(?:^|_)(?:cdc|phantom|playwright|puppeteer|selenium|webdriver)(?:_|$)/i;
+    const globalNames = Object.getOwnPropertyNames(globalThis);
+    const documentAttributes = document.documentElement
+      ? Array.from(document.documentElement.attributes, (attribute) =>
+          attribute.name,
+        )
+      : [];
 
-    let detected = false;
-    const probe = new Error();
-    Object.defineProperty(probe, "stack", {
-      configurable: true,
-      get() {
-        detected = true;
-        return "";
-      },
-    });
-
-    // CDP clients with Runtime instrumentation commonly inspect Error.stack
-    // while serializing console arguments. Open DevTools can do the same, so
-    // the server treats this as browser instrumentation rather than identity.
-    console.debug(probe);
-    return detected;
+    return (
+      globalNames.some((name) => automationPattern.test(name)) ||
+      documentAttributes.some((name) => automationPattern.test(name))
+    );
   } catch {
     return false;
   }
+};
+
+const collectClientAutomationEvidence = () => {
+  const automationArtifactsDetected = detectAutomationArtifacts();
+  const headlessUserAgent = /(?:HeadlessChrome|PhantomJS)\//i.test(
+    navigator.userAgent,
+  );
+  const webdriver = navigator.webdriver === true;
+
+  return {
+    automationArtifactsDetected,
+    shouldPreGate:
+      automationArtifactsDetected ||
+      headlessUserAgent ||
+      webdriver,
+    webdriver,
+  };
 };
 
 /**
@@ -618,6 +704,10 @@ export const trackPageView = ({
     if (requestsAgentCheckIn) {
       pendingInteractionClients.add(clientId);
     }
+    const automationEvidence = collectClientAutomationEvidence();
+    if (requestsAgentCheckIn && automationEvidence.shouldPreGate) {
+      renderPendingAgentCheckIn(clientId);
+    }
 
     void fetch(collectorEndpoint, {
       body: JSON.stringify({
@@ -630,8 +720,9 @@ export const trackPageView = ({
         referrerOrigin: getReferrerOrigin(),
         sdkVersion: SDK_VERSION,
         signals: {
-          cdpRuntimeDetected: detectCdpRuntime(),
-          webdriver: navigator.webdriver === true,
+          automationArtifactsDetected:
+            automationEvidence.automationArtifactsDetected,
+          webdriver: automationEvidence.webdriver,
         },
         version: 1,
       }),
@@ -649,7 +740,11 @@ export const trackPageView = ({
           ? handleCollectorResponse(response, clientId, interactionsEndpoint)
           : undefined,
       )
-      .catch(() => undefined)
+      .catch(() => {
+        if (requestsAgentCheckIn) {
+          clearPendingAgentCheckIn(clientId);
+        }
+      })
       .finally(() => {
         pendingInteractionClients.delete(clientId);
       });

@@ -9,7 +9,7 @@ const browserPackage = JSON.parse(
 );
 
 const installBrowserGlobals = ({
-  cdpRuntimeDetected = true,
+  automationArtifact = false,
   fetchResponse,
   doNotTrack = null,
   globalPrivacyControl = false,
@@ -18,6 +18,7 @@ const installBrowserGlobals = ({
   referrer = "https://search.example/results?q=private",
   webdriver = true,
 } = {}) => {
+  let consoleDebugCalls = 0;
   const requests = [];
   const originalDescriptors = new Map();
   const values = {
@@ -31,10 +32,8 @@ const installBrowserGlobals = ({
       },
     },
     console: {
-      debug(value) {
-        if (cdpRuntimeDetected) {
-          void value.stack;
-        }
+      debug() {
+        consoleDebugCalls += 1;
       },
     },
     document: { referrer },
@@ -49,9 +48,14 @@ const installBrowserGlobals = ({
     navigator: {
       doNotTrack,
       globalPrivacyControl,
+      userAgent:
+        "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/151.0.0.0 Safari/537.36",
       webdriver,
     },
   };
+  if (automationArtifact) {
+    values.__playwright__binding__ = () => undefined;
+  }
 
   for (const [key, value] of Object.entries(values)) {
     originalDescriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -63,6 +67,9 @@ const installBrowserGlobals = ({
   }
 
   return {
+    get consoleDebugCalls() {
+      return consoleDebugCalls;
+    },
     requests,
     restore() {
       for (const [key, descriptor] of originalDescriptors) {
@@ -92,8 +99,10 @@ test("queues a minimal page observation with the default collector", () => {
     assert.deepEqual(payload.capabilities, ["agent_check_in"]);
     assert.equal(payload.path, "/pricing");
     assert.equal(payload.referrerOrigin, "https://search.example");
-    assert.equal(payload.signals.cdpRuntimeDetected, true);
+    assert.equal(payload.signals.automationArtifactsDetected, false);
+    assert.equal("cdpRuntimeDetected" in payload.signals, false);
     assert.equal(payload.signals.webdriver, true);
+    assert.equal(browser.consoleDebugCalls, 0);
     assert.equal(payload.sdkVersion, browserPackage.version);
     assert.equal(
       JSON.stringify(payload).includes("private"),
@@ -104,16 +113,17 @@ test("queues a minimal page observation with the default collector", () => {
   }
 });
 
-test("reports an uninstrumented browser without blocking delivery", () => {
+test("reports known automation artifacts", () => {
   const browser = installBrowserGlobals({
-    cdpRuntimeDetected: false,
-    pathname: "/without-runtime-instrumentation",
+    automationArtifact: true,
+    pathname: "/automation-artifact",
+    webdriver: false,
   });
 
   try {
     assert.equal(trackPageView({ clientId: CLIENT_ID }), true);
     const payload = JSON.parse(browser.requests[0].init.body);
-    assert.equal(payload.signals.cdpRuntimeDetected, false);
+    assert.equal(payload.signals.automationArtifactsDetected, true);
   } finally {
     browser.restore();
   }
@@ -279,6 +289,56 @@ const findElement = (element, predicate) => {
 };
 
 const waitForPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test("renders a blocking pending gate before the collector responds", async () => {
+  const body = new FakeElement("body");
+  const page = new FakeElement("main");
+  body.append(page);
+  let resolveCollector;
+  const collectorResponse = new Promise((resolve) => {
+    resolveCollector = resolve;
+  });
+  const browser = installBrowserGlobals({
+    fetchResponse: () => collectorResponse,
+    pathname: "/pending-agent-check-in",
+  });
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      body,
+      createElement: (tagName) => new FakeElement(tagName),
+      referrer: "",
+    },
+    writable: true,
+  });
+
+  try {
+    const clientId = "rsp_5123456789abcdefghijklmnopqrstuv";
+    assert.equal(trackPageView({ clientId }), true);
+
+    const gate = findElement(body, (element) => element.tagName === "DIALOG");
+    assert.ok(gate);
+    assert.equal(gate.open, true);
+    assert.ok(
+      findElement(
+        gate,
+        (element) => element.textContent === "Agent check-in required",
+      ),
+    );
+    assert.ok(
+      findElement(
+        gate,
+        (element) => element.textContent === "Preparing check-in…",
+      ),
+    );
+
+    resolveCollector({ ok: true, status: 204 });
+    await waitForPromises();
+    assert.deepEqual(body.children, [page]);
+  } finally {
+    browser.restore();
+  }
+});
 
 test("renders and submits an agent check-in, then suppresses it for the tab", async () => {
   const interactionId = "9f4b8da9-8fc4-4ceb-8124-9da1461b780e";

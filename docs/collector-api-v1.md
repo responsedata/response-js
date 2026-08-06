@@ -15,7 +15,7 @@ CORS preflight and currently contains:
   "referrerOrigin": "https://example.com",
   "sdkVersion": "0.1.0",
   "signals": {
-    "cdpRuntimeDetected": true,
+    "automationArtifactsDetected": false,
     "webdriver": true
   },
   "version": 1
@@ -24,9 +24,12 @@ CORS preflight and currently contains:
 
 `referrerOrigin` may be `null`. Query parameters, fragments, page contents,
 form values, cookies, and local-storage identifiers are not sent.
-`cdpRuntimeDetected` reports browser instrumentation consistent with a Chrome
-DevTools Protocol runtime connection. It can also be triggered by a person with
-DevTools open, so it is evidence of instrumentation rather than agent identity.
+`automationArtifactsDetected` reports the presence of known automation globals
+or document attributes without sending their names.
+
+Previously released SDKs may also send the optional boolean
+`cdpRuntimeDetected`. The collector accepts that legacy field for version 1
+compatibility but discards it and does not use it for classification.
 
 `capabilities` is optional. The current SDK includes `agent_check_in` while it
 can render an interaction. Older SDKs omit the field and retain their existing
@@ -44,8 +47,11 @@ check in and the SDK declares support, it returns `200` with:
 }
 ```
 
-The SDK renders the fixed check-in form as a required native modal and resolves
-it at `POST https://www.response.sh/api/interactions/{id}`. The page remains
+When client-side automation evidence is already available, the SDK immediately
+renders a required pending modal while the collector evaluates the request. It
+replaces that modal with the fixed check-in form when the collector returns an
+interaction, or removes it when the request is declined. The form resolves at
+`POST https://www.response.sh/api/interactions/{id}`. The page remains
 inaccessible until that endpoint accepts either resolution. A submitted
 check-in is:
 
