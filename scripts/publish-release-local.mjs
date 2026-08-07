@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { sdkPackageFiles } from "./sdk-package-files.mjs";
 
 const rootDirectory = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -14,10 +15,7 @@ const dryRun = process.argv.includes("--dry-run");
 const tagArguments = process.argv
   .slice(2)
   .filter((argument) => argument !== "--dry-run");
-const packageFiles = [
-  "packages/browser/package.json",
-  "packages/next/package.json",
-];
+const packageFiles = sdkPackageFiles;
 const bucket =
   process.env.RESPONSE_CDN_R2_BUCKET?.trim() || "response-js-cdn";
 const releaseEnvironment = {
@@ -118,7 +116,7 @@ try {
   const versions = new Set(manifests.map((manifest) => manifest.version));
   if (versions.size !== 1 || !versions.has(requestedVersion)) {
     throw new Error(
-      `${releaseTag} does not match both SDK package versions: ` +
+      `${releaseTag} does not match all SDK package versions: ` +
         `${[...versions].join(", ")}.`,
     );
   }

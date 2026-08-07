@@ -5,17 +5,16 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { sdkPackageFiles } from "./sdk-package-files.mjs";
 
 const rootDirectory = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
 const dryRun = process.argv.includes("--dry-run");
+const publicRegistry = "https://registry.npmjs.org";
 const repositoryUrl = "git+https://github.com/responsedata/response-js.git";
-const packageFiles = [
-  "packages/browser/package.json",
-  "packages/next/package.json",
-];
+const packageFiles = sdkPackageFiles;
 const npmEnvironment = { ...process.env };
 
 // pnpm exposes private npm-config variables to child processes. npm warns
@@ -80,31 +79,31 @@ const stagingDirectory = await fs.mkdtemp(
 
 try {
   for (const manifest of packages) {
-    if (!dryRun) {
-      const published = run(
-        "npm",
-        [
-          "view",
-          `${manifest.name}@${manifest.version}`,
-          "version",
-          "--json",
-        ],
-        { env: npmEnvironment },
+    const published = run(
+      "npm",
+      [
+        "view",
+        `${manifest.name}@${manifest.version}`,
+        "version",
+        "--json",
+        "--registry",
+        publicRegistry,
+      ],
+      { env: npmEnvironment },
+    );
+
+    if (published.status === 0) {
+      console.log(
+        `Skipping ${manifest.name}@${manifest.version}; it is already published.`,
       );
+      continue;
+    }
 
-      if (published.status === 0) {
-        console.log(
-          `Skipping ${manifest.name}@${manifest.version}; it is already published.`,
-        );
-        continue;
-      }
-
-      const lookupOutput = `${published.stdout}\n${published.stderr}`;
-      if (!lookupOutput.includes("E404")) {
-        throw new Error(
-          `Unable to check ${manifest.name}@${manifest.version} on npm:\n${lookupOutput}`,
-        );
-      }
+    const lookupOutput = `${published.stdout}\n${published.stderr}`;
+    if (!lookupOutput.includes("E404")) {
+      throw new Error(
+        `Unable to check ${manifest.name}@${manifest.version} on npm:\n${lookupOutput}`,
+      );
     }
 
     const packageDirectory = await fs.mkdtemp(
@@ -140,6 +139,8 @@ try {
       path.join(packageDirectory, archives[0]),
       "--access",
       "public",
+      "--registry",
+      publicRegistry,
     ];
     if (dryRun) {
       publishArgs.push("--dry-run");

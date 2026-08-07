@@ -52,9 +52,10 @@ Response from the stored request context and is not decided by the SDK.
 
 ## Server requests
 
-The Next.js server entry sends request observations to
-`POST https://www.response.sh/api/requests` with the project's private server
-token:
+The Next.js server entry selects page-like requests and delegates normalized
+delivery to the framework-independent `@responsedata/server` core. The core
+sends observations to `POST https://www.response.sh/api/requests` with the
+project's private server token:
 
 ```http
 Authorization: Bearer rsp_server_...
@@ -87,11 +88,12 @@ The JSON payload contains:
 ```
 
 The server token authenticates and identifies the project, so the payload does
-not repeat a client or project ID. `referrerOrigin` may be `null`, and optional
-safe header properties are omitted when absent. Query strings, fragments,
-request bodies, cookies, authorization values, and IP addresses are never
-included. Delivery is scheduled with the Next.js request lifecycle and always
-fails open.
+not repeat a client or project ID. `sdkVersion` identifies the installed server
+core version, while `source` identifies the framework adapter. `referrerOrigin`
+may be `null`, and optional safe header properties are omitted when absent.
+Query strings, fragments, request bodies, cookies, authorization values, and IP
+addresses are never included. Delivery is scheduled with the Next.js request
+lifecycle and always fails open.
 
 ## Coverage
 
@@ -109,7 +111,8 @@ are reported separately and are not added together as visits.
 
 ## Rollout
 
-Release the browser and Next.js packages under a new version and upload the
-matching rolling CDN asset before deploying collector changes that depend on a
-new SDK contract. The Response application must then update its exact
-`@responsedata/nextjs` dependency and lockfile to that release.
+Release the browser, server core, and Next.js packages under a new version and
+upload the matching rolling CDN asset before deploying collector changes that
+depend on a new SDK contract. The Response application must then update its
+exact `@responsedata/nextjs` dependency and lockfile to that release; the server
+core is installed transitively.

@@ -44,9 +44,29 @@ const buildBrowserPackage = async () => {
   });
 };
 
+const buildServerPackage = async () => {
+  const packageDirectory = path.join(rootDirectory, "packages/server");
+  const version = await readPackageVersion(packageDirectory);
+  const outputDirectory = path.join(packageDirectory, "dist");
+  await resetGeneratedDirectory(outputDirectory);
+
+  await build({
+    bundle: true,
+    define: {
+      __RESPONSE_SERVER_SDK_VERSION__: JSON.stringify(version),
+    },
+    entryNames: "index",
+    entryPoints: [path.join(packageDirectory, "src/index.ts")],
+    format: "esm",
+    legalComments: "none",
+    outdir: outputDirectory,
+    platform: "neutral",
+    target: "es2020",
+  });
+};
+
 const buildNextPackage = async () => {
   const packageDirectory = path.join(rootDirectory, "packages/next");
-  const version = await readPackageVersion(packageDirectory);
   const outputDirectory = path.join(packageDirectory, "dist");
   await resetGeneratedDirectory(outputDirectory);
 
@@ -64,9 +84,6 @@ const buildNextPackage = async () => {
 
   await build({
     bundle: false,
-    define: {
-      __RESPONSE_NEXT_SDK_VERSION__: JSON.stringify(version),
-    },
     entryNames: "server",
     entryPoints: [path.join(packageDirectory, "src/server.ts")],
     format: "esm",
@@ -101,10 +118,12 @@ const buildCdnPackage = async () => {
 
 if (target === "browser") {
   await buildBrowserPackage();
+} else if (target === "server") {
+  await buildServerPackage();
 } else if (target === "next") {
   await buildNextPackage();
 } else if (target === "cdn") {
   await buildCdnPackage();
 } else {
-  throw new Error("Expected build target: browser, next, or cdn.");
+  throw new Error("Expected build target: browser, server, next, or cdn.");
 }

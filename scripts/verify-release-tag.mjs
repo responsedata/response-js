@@ -3,16 +3,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { sdkPackageFiles } from "./sdk-package-files.mjs";
 
 const rootDirectory = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
 const tag = process.argv[2] ?? process.env.GITHUB_REF_NAME;
-const packageFiles = [
-  "packages/browser/package.json",
-  "packages/next/package.json",
-];
+const packageFiles = sdkPackageFiles;
 const manifests = await Promise.all(
   packageFiles.map(async (file) =>
     JSON.parse(await fs.readFile(path.join(rootDirectory, file), "utf8")),

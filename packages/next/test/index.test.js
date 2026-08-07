@@ -36,5 +36,10 @@ test("keeps the client and server entries isolated", () => {
 
   assert.doesNotMatch(clientSource, /RESPONSE_TOKEN|createResponseProxy/);
   assert.doesNotMatch(serverSource, /@responsedata\/browser|use client/);
+  assert.match(serverSource, /from "@responsedata\/server"/);
   assert.match(serverSource, /createResponseProxy/);
+  assert.doesNotMatch(
+    serverSource,
+    /api\/requests|Authorization|acceptLanguage|rsp_server_|\bfetch\(/,
+  );
 });

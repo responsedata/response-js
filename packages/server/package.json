@@ -1,0 +1,44 @@
+{
+  "name": "@responsedata/server",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Framework-independent server SDK for Response traffic analytics",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-sdk-packages.mjs server && tsc --project tsconfig.json",
+    "prepack": "pnpm run build",
+    "test": "node --test test/index.test.js"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/responsedata/response-js.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://github.com/responsedata/response-js/tree/main/packages/server#readme",
+  "bugs": {
+    "url": "https://github.com/responsedata/response-js/issues"
+  },
+  "license": "MIT"
+}

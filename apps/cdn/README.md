@@ -33,8 +33,11 @@ responses or render UI on the host page.
 5. In the public `responsedata/response-js` GitHub repository, add an Actions
    secret named `CLOUDFLARE_API_TOKEN`. The non-secret account ID is committed
    in the repository's `wrangler.jsonc`.
-6. On npmjs.com, configure `.github/workflows/publish-sdk.yml` as the trusted
-   publisher for both `@responsedata/browser` and `@responsedata/nextjs`.
+6. Configure `publish-sdk.yml` as the npm trusted publisher for
+   `@responsedata/browser`, `@responsedata/server`, and `@responsedata/nextjs`.
+   Trust is configured separately for each package. For a new package, the
+   authenticated release bootstrap described in the root README publishes it
+   once and adds this setting; npm requires the package to exist first.
 
 The upload script writes `Content-Type` and `Cache-Control` metadata on each R2
 object. Classic cross-origin `<script>` tags do not require an R2 CORS policy.

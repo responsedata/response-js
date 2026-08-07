@@ -4,6 +4,10 @@ The Next.js integration for Response traffic analytics. It can observe incoming
 server requests and rendered browser page views. Each integration is optional
 and has its own import path.
 
+The server entry delegates its framework-independent privacy and delivery
+logic to `@responsedata/server`, which is installed automatically as a package
+dependency. Applications still install only `@responsedata/nextjs`.
+
 ```sh
 npm install @responsedata/nextjs
 ```

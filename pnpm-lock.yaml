@@ -31,6 +31,9 @@ importers:
       '@responsedata/browser':
         specifier: workspace:*
         version: link:../browser
+      '@responsedata/server':
+        specifier: workspace:*
+        version: link:../server
     devDependencies:
       '@types/react':
         specifier: ^19.2.0
@@ -44,6 +47,8 @@ importers:
       react-dom:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
+
+  packages/server: {}
 
 packages:
 

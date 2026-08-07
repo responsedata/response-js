@@ -35,3 +35,12 @@ jobs:
 
       - name: Test SDK packages
         run: pnpm test
+
+      - name: Set up minimum supported server runtime
+        uses: actions/setup-node@v6
+        with:
+          node-version: 18.17.0
+          package-manager-cache: false
+
+      - name: Test server packages on Node 18.17
+        run: node --test packages/server/test/index.test.js packages/next/test/server.test.js

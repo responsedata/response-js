@@ -26,11 +26,12 @@
   },
   "scripts": {
     "build": "node ../../scripts/build-sdk-packages.mjs next && tsc --project tsconfig.json",
-    "prepack": "pnpm --filter @responsedata/browser build && pnpm run build",
+    "prepack": "pnpm --filter @responsedata/browser build && pnpm --filter @responsedata/server build && pnpm run build",
     "test": "tsc --project tsconfig.test.json && node --test test/*.test.js"
   },
   "dependencies": {
-    "@responsedata/browser": "workspace:*"
+    "@responsedata/browser": "workspace:*",
+    "@responsedata/server": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",

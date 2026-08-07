@@ -4,6 +4,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {
+  locallyBootstrapableSdkPackageNames,
+  sdkPackageFiles,
+} from "./sdk-package-files.mjs";
 
 const rootDirectory = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -11,10 +15,11 @@ const rootDirectory = path.resolve(
 );
 const releaseType = process.argv[2] ?? "patch";
 const allowedReleaseTypes = new Set(["major", "minor", "patch"]);
-const versionFiles = [
-  "packages/browser/package.json",
-  "packages/next/package.json",
-];
+const versionFiles = sdkPackageFiles;
+const publicRegistry = "https://registry.npmjs.org";
+const bootstrapPackageNames = new Set(
+  locallyBootstrapableSdkPackageNames,
+);
 const releaseEnvironment = {
   ...process.env,
   EDITOR: "true",
@@ -63,6 +68,19 @@ const output = (command, args) => {
   return result.stdout.trim();
 };
 
+const isNotFound = (result) =>
+  `${result.stdout}\n${result.stderr}`.includes("E404");
+
+const npmView = (packageName) =>
+  run("npm", [
+    "view",
+    packageName,
+    "version",
+    "--json",
+    "--registry",
+    publicRegistry,
+  ]);
+
 try {
   if (output("git", ["branch", "--show-current"]) !== "main") {
     throw new Error("Releases must be created from the main branch.");
@@ -92,6 +110,64 @@ try {
     );
   }
 
+  const currentManifests = await Promise.all(
+    versionFiles.map(async (file) =>
+      JSON.parse(await fs.readFile(path.join(rootDirectory, file), "utf8")),
+    ),
+  );
+  const unpublishedPackageNames = [];
+  for (const manifest of currentManifests) {
+    const packageName = npmView(manifest.name);
+    if (packageName.status === 0) {
+      continue;
+    }
+    if (!isNotFound(packageName)) {
+      throw new Error(
+        `Unable to check ${manifest.name} on npm:\n` +
+          `${packageName.stderr || packageName.stdout}`,
+      );
+    }
+    if (!bootstrapPackageNames.has(manifest.name)) {
+      throw new Error(
+        `${manifest.name} has never been published and is not approved for local bootstrap.`,
+      );
+    }
+    unpublishedPackageNames.push(manifest.name);
+  }
+
+  if (unpublishedPackageNames.length > 0) {
+    const npmVersion = output("npm", ["--version"]);
+    const [npmMajor, npmMinor] = npmVersion.split(".").map(Number);
+    if (
+      !Number.isSafeInteger(npmMajor) ||
+      !Number.isSafeInteger(npmMinor) ||
+      npmMajor < 11 ||
+      (npmMajor === 11 && npmMinor < 15)
+    ) {
+      throw new Error(
+        `npm 11.15 or newer is required to bootstrap trusted publishing; found ${npmVersion}. ` +
+          "Run `npm install --global npm@11`, then rerun `pnpm release`.",
+      );
+    }
+    const npmIdentity = run("npm", [
+      "whoami",
+      "--registry",
+      publicRegistry,
+    ]);
+    if (npmIdentity.status !== 0) {
+      throw new Error(
+        `${unpublishedPackageNames.join(", ")} must be published once before ` +
+          "npm trusted publishing can be configured. Run `npm login " +
+          "--auth-type=web --registry https://registry.npmjs.org`, complete " +
+          "the browser and 2FA prompts, then rerun `pnpm release`.",
+      );
+    }
+    console.log(
+      `The release will bootstrap ${unpublishedPackageNames.join(", ")} ` +
+        `using the npm account ${npmIdentity.stdout.trim()}.`,
+    );
+  }
+
   const originalFiles = new Map(
     await Promise.all(
       versionFiles.map(async (file) => [
@@ -100,8 +176,11 @@ try {
       ]),
     ),
   );
-  let releaseCommitted = false;
+  let releaseBranchUpdated = false;
+  let releaseTagCreated = false;
+  let releaseCommit = "";
   let releaseTag = "";
+  let bootstrapCompleted = false;
 
   try {
     runChecked("pnpm", ["sdk:version", releaseType]);
@@ -157,7 +236,7 @@ try {
     // This cannot open an editor or signing prompt, regardless of user config.
     const parentCommit = output("git", ["rev-parse", "HEAD"]);
     const releaseTree = output("git", ["write-tree"]);
-    const releaseCommit = output("git", [
+    releaseCommit = output("git", [
       "commit-tree",
       releaseTree,
       "-p",
@@ -174,7 +253,7 @@ try {
       releaseCommit,
       parentCommit,
     ]);
-    releaseCommitted = true;
+    releaseBranchUpdated = true;
     runChecked("git", [
       "update-ref",
       "-m",
@@ -182,6 +261,20 @@ try {
       `refs/tags/${releaseTag}`,
       releaseCommit,
     ]);
+    releaseTagCreated = true;
+    runChecked("git", [
+      "push",
+      "--dry-run",
+      "--atomic",
+      "origin",
+      "main",
+      releaseTag,
+    ]);
+    if (unpublishedPackageNames.length > 0) {
+      console.log(`Bootstrapping first npm publication for ${releaseTag}...`);
+      runChecked("pnpm", ["sdk:bootstrap", releaseTag]);
+      bootstrapCompleted = true;
+    }
     runChecked("git", ["push", "--atomic", "origin", "main", releaseTag]);
 
     console.log(`\n${releaseTag} was pushed successfully.`);
@@ -192,8 +285,13 @@ try {
     console.log(
       `If the release workflow is unavailable, run: pnpm release:publish-local ${releaseTag}`,
     );
+    if (unpublishedPackageNames.length > 0) {
+      console.log(
+        "The new package is configured for GitHub trusted publishing on future releases.",
+      );
+    }
   } catch (error) {
-    if (!releaseCommitted) {
+    if (!releaseBranchUpdated) {
       run("git", [
         "restore",
         "--staged",
@@ -208,8 +306,26 @@ try {
       );
     } else {
       console.error(
-        `The ${releaseTag} commit remains local. Fix the problem and push it instead of running another release.`,
+        `The ${releaseTag} release commit${releaseTagCreated ? " and tag remain" : " remains"} local. ` +
+          "Fix the problem and recover this release instead of running another one.",
       );
+      if (!releaseTagCreated) {
+        console.error(`Recovery commands:\n`);
+        console.error(
+          `  git update-ref refs/tags/${releaseTag} ${releaseCommit}`,
+        );
+      }
+      if (unpublishedPackageNames.length > 0 && !bootstrapCompleted) {
+        if (releaseTagCreated) {
+          console.error(`Recovery commands:\n`);
+        }
+        console.error(`  pnpm sdk:bootstrap ${releaseTag}`);
+        console.error(`  git push --atomic origin main ${releaseTag}`);
+      } else {
+        console.error(
+          `Retry the push with: git push --atomic origin main ${releaseTag}`,
+        );
+      }
     }
     throw error;
   }

@@ -3,16 +3,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { sdkPackageFiles } from "./sdk-package-files.mjs";
 
 const rootDirectory = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
 const releaseType = process.argv[2];
-const packageFiles = [
-  "packages/browser/package.json",
-  "packages/next/package.json",
-];
+const packageFiles = sdkPackageFiles;
 const bumpIndex = { major: 0, minor: 1, patch: 2 }[releaseType];
 
 if (bumpIndex === undefined) {
