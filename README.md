@@ -28,6 +28,25 @@ import { ResponseAnalytics } from "@responsedata/nextjs";
 <ResponseAnalytics clientId="YOUR_PUBLIC_CLIENT_ID" />
 ```
 
+To collect incoming Next.js server requests as well, create a private server
+token in Response and add a Proxy beside the `app` or `pages` directory
+(`proxy.ts` at the root, or `src/proxy.ts` for a `src` layout):
+
+```sh
+RESPONSE_TOKEN=YOUR_PRIVATE_SERVER_TOKEN
+```
+
+```ts
+// proxy.ts
+import { createResponseProxy } from "@responsedata/nextjs/server";
+
+export const proxy = createResponseProxy();
+```
+
+The browser client ID is safe to expose. The server token belongs to the same
+Response project but must remain server-only and must not be passed to browser
+code.
+
 For other bundled browser applications:
 
 ```sh

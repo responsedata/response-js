@@ -23,3 +23,18 @@ test("loads from Node without requiring package transpilation", async () => {
 
   assert.equal(typeof sdk.ResponseAnalytics, "function");
 });
+
+test("keeps the client and server entries isolated", () => {
+  const clientSource = fs.readFileSync(
+    new URL("../dist/index.js", import.meta.url),
+    "utf8",
+  );
+  const serverSource = fs.readFileSync(
+    new URL("../dist/server.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(clientSource, /RESPONSE_TOKEN|createResponseProxy/);
+  assert.doesNotMatch(serverSource, /@responsedata\/browser|use client/);
+  assert.match(serverSource, /createResponseProxy/);
+});

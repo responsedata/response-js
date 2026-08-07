@@ -46,6 +46,7 @@ const buildBrowserPackage = async () => {
 
 const buildNextPackage = async () => {
   const packageDirectory = path.join(rootDirectory, "packages/next");
+  const version = await readPackageVersion(packageDirectory);
   const outputDirectory = path.join(packageDirectory, "dist");
   await resetGeneratedDirectory(outputDirectory);
 
@@ -58,6 +59,20 @@ const buildNextPackage = async () => {
     legalComments: "none",
     outdir: outputDirectory,
     platform: "browser",
+    target: "es2020",
+  });
+
+  await build({
+    bundle: false,
+    define: {
+      __RESPONSE_NEXT_SDK_VERSION__: JSON.stringify(version),
+    },
+    entryNames: "server",
+    entryPoints: [path.join(packageDirectory, "src/server.ts")],
+    format: "esm",
+    legalComments: "none",
+    outdir: outputDirectory,
+    platform: "neutral",
     target: "es2020",
   });
 };
