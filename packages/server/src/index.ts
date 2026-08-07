@@ -31,12 +31,16 @@ export type ServerRequestHeaders = {
 };
 
 export type ServerRequest = {
+  /** Cloudflare Workers metadata for the original incoming request, when available. */
+  cf?: unknown;
   headers: ServerRequestHeaders;
   method: string;
   url: string;
 };
 
 export type TrackServerRequestOptions = {
+  /** Cloudflare metadata for the original request when an adapter exposes it. */
+  cloudflare?: unknown;
   /** Overrides the Response collector URL. HTTPS is required outside localhost. */
   collectorEndpoint?: string;
   /** Set to false to disable collection without removing the integration. */
@@ -152,10 +156,176 @@ const getSafeHeaders = (headers: ServerRequestHeaders) => {
   return values;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const boundedString = (value: unknown, maximumLength: number) => {
+  if (typeof value !== "string" || value.length === 0) {
+    return undefined;
+  }
+
+  const sanitized = sanitizeHeader(value, maximumLength);
+  return sanitized || undefined;
+};
+
+const boundedInteger = (value: unknown, minimum: number, maximum: number) =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= minimum &&
+  value <= maximum
+    ? value
+    : undefined;
+
+const boundedIntegerArray = (value: unknown, maximumItems: number) => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const integers = value
+    .filter(
+      (item): item is number =>
+        typeof item === "number" &&
+        Number.isSafeInteger(item) &&
+        item >= 0,
+    )
+    .slice(0, maximumItems);
+  return integers.length > 0 ? integers : undefined;
+};
+
+const compact = (value: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined),
+  );
+
+const hasValues = (value: object) => Object.keys(value).length > 0;
+
+const decodeHeader = (value: string | null, maximumLength: number) => {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return boundedString(decodeURIComponent(value), maximumLength);
+  } catch {
+    return boundedString(value, maximumLength);
+  }
+};
+
+const createCloudflareEvidence = (cloudflare: Record<string, unknown>) => {
+  const botManagement = isRecord(cloudflare.botManagement)
+    ? cloudflare.botManagement
+    : undefined;
+  const jsDetection = isRecord(botManagement?.jsDetection)
+    ? botManagement.jsDetection
+    : undefined;
+  const evidence = compact({
+    botScore: boundedInteger(botManagement?.score, 0, 99),
+    colo: boundedString(cloudflare.colo, 8),
+    corporateProxy:
+      typeof botManagement?.corporateProxy === "boolean"
+        ? botManagement.corporateProxy
+        : undefined,
+    detectionIds: boundedIntegerArray(botManagement?.detectionIds, 32),
+    ja3Hash: boundedString(botManagement?.ja3Hash, 128),
+    ja4: boundedString(botManagement?.ja4, 128),
+    jsDetectionPassed:
+      typeof jsDetection?.passed === "boolean"
+        ? jsDetection.passed
+        : undefined,
+    signedAgent:
+      typeof botManagement?.signedAgent === "boolean"
+        ? botManagement.signedAgent
+        : undefined,
+    staticResource:
+      typeof botManagement?.staticResource === "boolean"
+        ? botManagement.staticResource
+        : undefined,
+    verifiedBot:
+      typeof botManagement?.verifiedBot === "boolean"
+        ? botManagement.verifiedBot
+        : undefined,
+    verifiedBotCategory: boundedString(cloudflare.verifiedBotCategory, 64),
+  });
+  return hasValues(evidence) ? evidence : undefined;
+};
+
+const createCloudflareNetworkEvidence = (
+  cloudflare: Record<string, unknown>,
+) => {
+  const network = compact({
+    asn: boundedInteger(cloudflare.asn, 1, 4_294_967_295),
+    city: boundedString(cloudflare.city, 128),
+    continent: boundedString(cloudflare.continent, 2),
+    country: boundedString(cloudflare.country, 2),
+    organization: boundedString(cloudflare.asOrganization, 256),
+    region: boundedString(cloudflare.region, 128),
+    regionCode: boundedString(cloudflare.regionCode, 16),
+    source: "cloudflare",
+    timezone: boundedString(cloudflare.timezone, 64),
+  });
+  return hasValues(network) ? network : undefined;
+};
+
+const createVercelNetworkEvidence = (headers: ServerRequestHeaders) => {
+  // Vercel overwrites these headers with geolocation derived from the
+  // original request IP. Keep only coarse location and never send the IP.
+  if (!headers.get("x-vercel-id")) {
+    return undefined;
+  }
+
+  const network = compact({
+    city: decodeHeader(headers.get("x-vercel-ip-city"), 128),
+    continent: boundedString(headers.get("x-vercel-ip-continent"), 2),
+    country: boundedString(headers.get("x-vercel-ip-country"), 2),
+    regionCode: boundedString(
+      headers.get("x-vercel-ip-country-region"),
+      16,
+    ),
+    source: "vercel",
+    timezone: boundedString(headers.get("x-vercel-ip-timezone"), 64),
+  });
+  return Object.keys(network).length > 1 ? network : undefined;
+};
+
+const createTransportEvidence = (cloudflare: Record<string, unknown>) => {
+  const transport = compact({
+    clientQuicRtt: boundedInteger(cloudflare.clientQuicRtt, 0, 60_000),
+    clientTcpRtt: boundedInteger(cloudflare.clientTcpRtt, 0, 60_000),
+    httpProtocol: boundedString(cloudflare.httpProtocol, 32),
+    tlsCipher: boundedString(cloudflare.tlsCipher, 128),
+    tlsVersion: boundedString(cloudflare.tlsVersion, 32),
+  });
+  return hasValues(transport) ? transport : undefined;
+};
+
+const createPlatformEvidence = (
+  request: ServerRequest,
+  suppliedCloudflare?: unknown,
+) => {
+  const cloudflare = isRecord(suppliedCloudflare)
+    ? suppliedCloudflare
+    : isRecord(request.cf)
+      ? request.cf
+      : undefined;
+  return compact({
+    cloudflare: cloudflare
+      ? createCloudflareEvidence(cloudflare)
+      : undefined,
+    network: cloudflare
+      ? createCloudflareNetworkEvidence(cloudflare)
+      : createVercelNetworkEvidence(request.headers),
+    transport: cloudflare
+      ? createTransportEvidence(cloudflare)
+      : undefined,
+  });
+};
+
 const normalizeRequest = ({
+  cloudflare,
   collectorEndpoint,
   request,
 }: {
+  cloudflare?: unknown;
   collectorEndpoint: URL;
   request: ServerRequest;
 }) => {
@@ -190,6 +360,7 @@ const normalizeRequest = ({
     host: requestUrl.host,
     method,
     path,
+    ...createPlatformEvidence(request, cloudflare),
     referrerOrigin: getReferrerOrigin(request.headers),
     userAgent: sanitizeHeader(
       request.headers.get("user-agent"),
@@ -255,6 +426,7 @@ const createDeliveryTimeout = () => {
  * Returns a fail-open delivery promise, or null when collection is skipped.
  */
 export const trackServerRequest = ({
+  cloudflare,
   collectorEndpoint: suppliedCollectorEndpoint,
   enabled = true,
   request,
@@ -279,6 +451,7 @@ export const trackServerRequest = ({
     }
 
     const normalizedRequest = normalizeRequest({
+      cloudflare,
       collectorEndpoint,
       request,
     });

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Response Inspector</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div>
+        <h1>Response</h1>
+        <p>Client-side page views</p>
+      </div>
+      <button id="clear-events" type="button" disabled>Clear</button>
+    </header>
+
+    <main>
+      <div class="event-table" aria-label="Captured Response events">
+        <div class="event-header" aria-hidden="true">
+          <span>Path</span>
+          <span>SDK</span>
+          <span>Time</span>
+          <span>HTTP</span>
+          <span>Result</span>
+        </div>
+        <div id="event-list"></div>
+      </div>
+
+      <div id="empty-state" class="empty-state">
+        <p>No Response page views captured yet.</p>
+        <span>Keep this panel open and reload the page.</span>
+      </div>
+    </main>
+
+    <script src="panel.js"></script>
+  </body>
+</html>

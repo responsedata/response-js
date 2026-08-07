@@ -40,9 +40,24 @@ For Next.js 14 or 15, put `middleware.ts` in the same location and export it as
 Delivery runs through Next.js `waitUntil`, so it does not delay or alter the
 site response. The integration records queryless GET and HEAD paths, the
 original visitor user agent and referrer origin, and a small allowlist of safe
-browser headers. It never sends query strings, bodies, cookies, authorization
-headers, or IP addresses. Common frontend assets (scripts, styles, images,
-fonts, and media), Next.js internal requests, and prefetches are ignored.
+browser headers. It automatically reads Vercel's coarse geolocation headers.
+It never sends query strings, bodies, cookies, authorization headers,
+coordinates, postal codes, or IP addresses. Common frontend assets (scripts,
+styles, images, fonts, and media), Next.js internal requests, and prefetches are
+ignored.
+
+OpenNext Cloudflare reconstructs the `NextRequest` without its Workers-only
+`cf` property. To include the original request's Cloudflare bot-management,
+network, location, and transport evidence, supply it from the request context:
+
+```ts
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { createResponseProxy } from "@responsedata/nextjs/server";
+
+export const middleware = createResponseProxy({
+  getCloudflareProperties: () => getCloudflareContext().cf,
+});
+```
 
 `RESPONSE_SERVER_ID` is private and must never use the `NEXT_PUBLIC_` prefix. For a
 local collector, pass an override:

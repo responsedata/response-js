@@ -24,6 +24,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/browser
 
+  apps/chrome-extension: {}
+
   packages/browser: {}
 
   packages/next:

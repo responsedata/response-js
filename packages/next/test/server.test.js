@@ -20,6 +20,7 @@ test("loads through the published server subpath", async () => {
 const captureDelivery = async ({
   collectorEndpoint = "https://collector.example/api/requests",
   enabled,
+  getCloudflareProperties,
   request = new Request("https://docs.example.com/guides/install"),
   token = TOKEN,
 } = {}) => {
@@ -32,7 +33,12 @@ const captureDelivery = async ({
   };
 
   try {
-    const proxy = createResponseProxy({ collectorEndpoint, enabled, token });
+    const proxy = createResponseProxy({
+      collectorEndpoint,
+      enabled,
+      getCloudflareProperties,
+      token,
+    });
     const result = proxy(request, {
       waitUntil(promise) {
         pending.push(promise);
@@ -68,6 +74,28 @@ test("delegates one normalized observation to the server core", async () => {
   assert.equal(payload.sdkVersion, serverPackage.version);
   assert.equal(payload.source, "nextjs");
   assert.equal(JSON.stringify(payload).includes("private"), false);
+});
+
+test("forwards adapter-supplied Cloudflare metadata for the original request", async () => {
+  const { deliveries } = await captureDelivery({
+    getCloudflareProperties: () => ({
+      asn: 16509,
+      asOrganization: "Amazon.com, Inc.",
+      city: "Seattle",
+      country: "US",
+      regionCode: "WA",
+    }),
+  });
+  const payload = JSON.parse(deliveries[0].init.body);
+
+  assert.deepEqual(payload.network, {
+    asn: 16509,
+    city: "Seattle",
+    country: "US",
+    organization: "Amazon.com, Inc.",
+    regionCode: "WA",
+    source: "cloudflare",
+  });
 });
 
 test("ignores non-page requests and internal Next.js traffic", async () => {

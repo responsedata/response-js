@@ -1,0 +1,161 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: Canvas;
+  color: CanvasText;
+  margin: 0;
+}
+
+.toolbar {
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  display: flex;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 8px 12px;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.toolbar p {
+  color: color-mix(in srgb, CanvasText 62%, transparent);
+  margin-top: 2px;
+}
+
+button {
+  background: ButtonFace;
+  border: 1px solid color-mix(in srgb, ButtonText 25%, transparent);
+  border-radius: 4px;
+  color: ButtonText;
+  cursor: pointer;
+  font: inherit;
+  padding: 5px 10px;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.event-header,
+.event-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(160px, 1fr) 90px 110px 56px 110px;
+  min-width: 580px;
+}
+
+.event-header {
+  background: color-mix(in srgb, CanvasText 5%, Canvas);
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  color: color-mix(in srgb, CanvasText 68%, transparent);
+  font-weight: 600;
+  padding: 6px 28px 6px 12px;
+}
+
+.event {
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+}
+
+.event-row {
+  cursor: pointer;
+  list-style-position: inside;
+  padding: 8px 12px;
+}
+
+.event-row:hover {
+  background: color-mix(in srgb, Highlight 8%, Canvas);
+}
+
+.event-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.result {
+  border-radius: 999px;
+  justify-self: start;
+  padding: 2px 7px;
+}
+
+.result[data-result="stored"] {
+  background: color-mix(in srgb, #22a06b 18%, Canvas);
+  color: #168653;
+}
+
+.result[data-result="not-stored"],
+.result[data-result="network"] {
+  background: color-mix(in srgb, #d13c3c 18%, Canvas);
+  color: #c52e2e;
+}
+
+.result[data-result="unverified"] {
+  background: color-mix(in srgb, #b47700 18%, Canvas);
+  color: #966100;
+}
+
+.payload {
+  background: color-mix(in srgb, CanvasText 4%, Canvas);
+  border-top: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
+  padding: 10px 28px;
+}
+
+.payload-heading {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+pre {
+  background: color-mix(in srgb, CanvasText 6%, Canvas);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.collector {
+  color: color-mix(in srgb, CanvasText 58%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-top: 7px;
+}
+
+.empty-state {
+  color: color-mix(in srgb, CanvasText 62%, transparent);
+  padding: 48px 20px;
+  text-align: center;
+}
+
+.empty-state p {
+  color: CanvasText;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 5px;
+}

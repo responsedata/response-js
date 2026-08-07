@@ -7,10 +7,18 @@ import type { NextFetchEvent, NextRequest } from "next/server.js";
 const STATIC_ASSET_PATTERN =
   /\.(?:avif|bmp|css|cur|eot|gif|ico|jpe?g|js|mjs|map|mp3|mp4|ogg|otf|png|svg|ttf|wasm|webm|webmanifest|webp|woff2?)$/i;
 
-export type ResponseProxyOptions = Pick<
+type CoreResponseProxyOptions = Pick<
   TrackServerRequestOptions,
   "collectorEndpoint" | "enabled" | "token"
 >;
+
+export type ResponseProxyOptions = CoreResponseProxyOptions & {
+  /**
+   * Supplies Cloudflare metadata for the original request. OpenNext users can
+   * return `getCloudflareContext().cf` here from inside the request lifecycle.
+   */
+  getCloudflareProperties?: () => unknown;
+};
 
 export type ResponseProxy = (
   request: NextRequest,
@@ -54,8 +62,10 @@ export const createResponseProxy = (
         return;
       }
 
+      const { getCloudflareProperties, ...coreOptions } = options;
       const delivery = trackServerRequest({
-        ...options,
+        ...coreOptions,
+        cloudflare: getCloudflareProperties?.(),
         request,
         source: "nextjs",
       });

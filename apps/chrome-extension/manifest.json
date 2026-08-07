@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "Response Inspector",
+  "version": "0.1.0",
+  "description": "Inspect Response browser analytics requests in Chrome DevTools.",
+  "devtools_page": "devtools.html"
+}

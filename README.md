@@ -13,6 +13,8 @@ contract.
 - [`packages/next`](packages/next) publishes `@responsedata/nextjs`.
 - [`apps/cdn`](apps/cdn) builds and deploys the hosted browser script. It is an
   application workspace, not an npm package.
+- [`apps/chrome-extension`](apps/chrome-extension) builds the permission-free
+  Response Inspector panel for Chrome DevTools.
 - [`docs/collector-api.md`](docs/collector-api.md) defines the API
   boundary between these public SDKs and the private collector.
 
@@ -84,9 +86,10 @@ pnpm install
 pnpm test
 ```
 
-`pnpm build` creates all three npm package outputs and the CDN file under
-`apps/cdn/dist`. No sibling checkout of the private Response application is
-required.
+`pnpm build` creates all three npm package outputs, the CDN file under
+`apps/cdn/dist`, and the load-unpacked Chrome extension under
+`apps/chrome-extension/dist`. No sibling checkout of the private Response
+application is required.
 
 ## Releasing
 

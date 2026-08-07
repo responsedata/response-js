@@ -122,6 +122,108 @@ test("sends a privacy-limited server request observation", async () => {
   assert.equal(JSON.stringify(payload).includes("authorization"), false);
 });
 
+test("sends bounded Cloudflare evidence for the original request", async () => {
+  const request = new Request("https://docs.example.com/pricing", {
+    headers: { "user-agent": "ExampleBrowser/1.0" },
+  });
+  Object.defineProperty(request, "cf", {
+    value: {
+      asn: 16509,
+      asOrganization: "Amazon.com, Inc.",
+      botManagement: {
+        corporateProxy: false,
+        detectionIds: [3355446, "invalid"],
+        ja3Hash: "example-ja3",
+        ja4: "example-ja4",
+        jsDetection: { passed: false },
+        score: 12,
+        signedAgent: true,
+        staticResource: false,
+        verifiedBot: false,
+      },
+      clientIp: "203.0.113.10",
+      clientTcpRtt: 24,
+      city: "Seattle",
+      colo: "SJC",
+      continent: "NA",
+      country: "US",
+      httpProtocol: "HTTP/3",
+      latitude: "47.60621",
+      postalCode: "98101",
+      region: "Washington",
+      regionCode: "WA",
+      timezone: "America/Los_Angeles",
+      tlsCipher: "AEAD-AES128-GCM-SHA256",
+      tlsVersion: "TLSv1.3",
+      verifiedBotCategory: "Search Engine Crawler",
+    },
+  });
+
+  const { deliveries } = await captureDelivery({ request });
+  const payload = JSON.parse(deliveries[0].init.body);
+
+  assert.deepEqual(payload.cloudflare, {
+    botScore: 12,
+    colo: "SJC",
+    corporateProxy: false,
+    detectionIds: [3355446],
+    ja3Hash: "example-ja3",
+    ja4: "example-ja4",
+    jsDetectionPassed: false,
+    signedAgent: true,
+    staticResource: false,
+    verifiedBot: false,
+    verifiedBotCategory: "Search Engine Crawler",
+  });
+  assert.deepEqual(payload.network, {
+    asn: 16509,
+    city: "Seattle",
+    continent: "NA",
+    country: "US",
+    organization: "Amazon.com, Inc.",
+    region: "Washington",
+    regionCode: "WA",
+    source: "cloudflare",
+    timezone: "America/Los_Angeles",
+  });
+  assert.deepEqual(payload.transport, {
+    clientTcpRtt: 24,
+    httpProtocol: "HTTP/3",
+    tlsCipher: "AEAD-AES128-GCM-SHA256",
+    tlsVersion: "TLSv1.3",
+  });
+  assert.equal(JSON.stringify(payload).includes("203.0.113.10"), false);
+  assert.equal(JSON.stringify(payload).includes("47.60621"), false);
+  assert.equal(JSON.stringify(payload).includes("98101"), false);
+});
+
+test("uses Vercel's coarse original-request geolocation without sending IPs", async () => {
+  const request = new Request("https://docs.example.com/pricing", {
+    headers: {
+      "x-real-ip": "203.0.113.10",
+      "x-vercel-id": "sfo1::iad1::example",
+      "x-vercel-ip-city": "San%20Francisco",
+      "x-vercel-ip-continent": "NA",
+      "x-vercel-ip-country": "US",
+      "x-vercel-ip-country-region": "CA",
+      "x-vercel-ip-timezone": "America/Los_Angeles",
+    },
+  });
+
+  const { deliveries } = await captureDelivery({ request });
+  const payload = JSON.parse(deliveries[0].init.body);
+
+  assert.deepEqual(payload.network, {
+    city: "San Francisco",
+    continent: "NA",
+    country: "US",
+    regionCode: "CA",
+    source: "vercel",
+    timezone: "America/Los_Angeles",
+  });
+  assert.equal(JSON.stringify(payload).includes("203.0.113.10"), false);
+});
+
 test("uses RESPONSE_SERVER_ID when no token option is supplied", async () => {
   const previousServerId = process.env.RESPONSE_SERVER_ID;
   process.env.RESPONSE_SERVER_ID = TOKEN;

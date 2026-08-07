@@ -6,11 +6,13 @@
     "node": ">=20.12.0"
   },
   "scripts": {
-    "build": "pnpm --filter @responsedata/browser build && pnpm --filter @responsedata/server build && pnpm --filter @responsedata/nextjs build && pnpm --filter @responsedata/browser-cdn build",
+    "build": "pnpm --filter @responsedata/browser build && pnpm --filter @responsedata/server build && pnpm --filter @responsedata/nextjs build && pnpm --filter @responsedata/browser-cdn build && pnpm --filter @responsedata/chrome-extension build",
     "cdn:build": "pnpm --filter @responsedata/browser-cdn build",
     "cdn:upload": "pnpm cdn:build && node scripts/upload-cdn.mjs",
     "cdn:upload:dry-run": "pnpm cdn:build && node scripts/upload-cdn.mjs --dry-run",
     "cdn:test": "pnpm cdn:build && pnpm --filter @responsedata/browser-cdn test",
+    "extension:build": "pnpm --filter @responsedata/chrome-extension build",
+    "extension:test": "pnpm extension:build && pnpm --filter @responsedata/chrome-extension test",
     "release": "node scripts/create-release.mjs",
     "release:publish-local": "node scripts/publish-release-local.mjs",
     "release:publish-local:dry-run": "node scripts/publish-release-local.mjs --dry-run",
@@ -19,7 +21,7 @@
     "sdk:publish": "node scripts/publish-sdk-packages.mjs",
     "sdk:publish:dry-run": "node scripts/publish-sdk-packages.mjs --dry-run",
     "sdk:version": "node scripts/version-sdk-packages.mjs",
-    "test": "pnpm build && pnpm --filter @responsedata/browser test && pnpm --filter @responsedata/server test && pnpm --filter @responsedata/nextjs test && pnpm --filter @responsedata/browser-cdn test"
+    "test": "pnpm build && pnpm --filter @responsedata/browser test && pnpm --filter @responsedata/server test && pnpm --filter @responsedata/nextjs test && pnpm --filter @responsedata/browser-cdn test && pnpm --filter @responsedata/chrome-extension test"
   },
   "devDependencies": {
     "esbuild": "0.25.4",

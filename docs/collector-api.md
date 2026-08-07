@@ -45,10 +45,15 @@ form values, cookies, and persistent cross-tab identifiers are not sent.
 `automationArtifactsDetected` reports the presence of known automation globals
 or document attributes without sending their names.
 
-The collector records every valid observation and normally returns `204 No
-Content`. Delivery is fire-and-forget: the SDK does not parse the response or
-render any collector-controlled interface. Traffic classification happens in
-Response from the stored request context and is not decided by the SDK.
+The collector normally returns `204 No Content` and includes a
+`Response-Event-Result` response header. `stored` means this request inserted
+the event; `not-stored` means it was deterministically rejected or ignored. An
+indeterminate collector failure returns an error status without a result
+header. Delivery remains fire-and-forget: the SDK does not parse the response
+or render any collector-controlled interface. Response Inspector uses this
+receipt to report storage without changing SDK behavior. Traffic classification
+happens in Response from the stored request context and is not decided by the
+SDK.
 
 ## Server requests
 
@@ -75,6 +80,14 @@ The JSON payload contains:
   "sdkVersion": "1.2.3",
   "source": "nextjs",
   "userAgent": "ExampleBot/1.0",
+  "network": {
+    "asn": 16509,
+    "city": "Seattle",
+    "country": "US",
+    "organization": "Amazon.com, Inc.",
+    "regionCode": "WA",
+    "source": "cloudflare"
+  },
   "headers": {
     "acceptLanguage": "en-US",
     "secChUa": "...",
@@ -91,9 +104,16 @@ The server token authenticates and identifies the project, so the payload does
 not repeat a client or project ID. `sdkVersion` identifies the installed server
 core version, while `source` identifies the framework adapter. `referrerOrigin`
 may be `null`, and optional safe header properties are omitted when absent.
-Query strings, fragments, request bodies, cookies, authorization values, and IP
-addresses are never included. Delivery is scheduled with the Next.js request
-lifecycle and always fails open.
+When available on the original incoming request, the payload also includes
+bounded `cloudflare`, `network`, and `transport` objects. These preserve coarse
+geolocation, ASN/organization, bot-management, TLS, protocol, and connection
+evidence without retaining the visitor IP. The collector deliberately does not
+use Cloudflare metadata from the later SDK-to-collector POST because that
+describes the reporting application server, not the original visitor.
+
+Query strings, fragments, request bodies, cookies, authorization values,
+coordinates, postal codes, and IP addresses are never included. Delivery is
+scheduled with the Next.js request lifecycle and always fails open.
 
 ## Coverage
 
