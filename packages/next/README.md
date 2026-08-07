@@ -17,7 +17,7 @@ npm install @responsedata/nextjs
 Create a private server token in Response and add it to your environment:
 
 ```sh
-RESPONSE_TOKEN=YOUR_PRIVATE_SERVER_TOKEN
+RESPONSE_SERVER_ID=YOUR_PRIVATE_SERVER_ID
 ```
 
 Then add a Next.js Proxy beside the `app` or `pages` directory. Use `proxy.ts`
@@ -44,7 +44,7 @@ browser headers. It never sends query strings, bodies, cookies, authorization
 headers, or IP addresses. Common frontend assets (scripts, styles, images,
 fonts, and media), Next.js internal requests, and prefetches are ignored.
 
-`RESPONSE_TOKEN` is private and must never use the `NEXT_PUBLIC_` prefix. For a
+`RESPONSE_SERVER_ID` is private and must never use the `NEXT_PUBLIC_` prefix. For a
 local collector, pass an override:
 
 ```ts

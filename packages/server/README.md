@@ -21,7 +21,7 @@ if (delivery) {
 }
 ```
 
-The private token defaults to the server-only `RESPONSE_TOKEN` environment
+The private token defaults to the server-only `RESPONSE_SERVER_ID` environment
 variable. The core accepts only GET and HEAD requests, removes query strings
 and fragments, reduces referrers to origins, and sends only an explicit
 allowlist of bounded headers. It never sends bodies, cookies, authorization

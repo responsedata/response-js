@@ -1,7 +1,7 @@
 declare const __RESPONSE_SERVER_SDK_VERSION__: string;
 declare const process: {
   env: {
-    RESPONSE_TOKEN?: string;
+    RESPONSE_SERVER_ID?: string;
   };
 };
 
@@ -44,7 +44,7 @@ export type TrackServerRequestOptions = {
   request: ServerRequest;
   /** Identifies the framework adapter that supplied the request. */
   source: string;
-  /** Defaults to the server-only RESPONSE_TOKEN environment variable. */
+  /** Defaults to the server-only RESPONSE_SERVER_ID environment variable. */
   token?: string;
 };
 
@@ -81,7 +81,7 @@ const normalizeToken = (value: string | undefined) => {
 
 const resolveDefaultToken = () => {
   try {
-    return process.env.RESPONSE_TOKEN;
+    return process.env.RESPONSE_SERVER_ID;
   } catch {
     return undefined;
   }

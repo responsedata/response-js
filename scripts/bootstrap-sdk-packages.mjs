@@ -17,6 +17,8 @@ const rootDirectory = path.resolve(
 const publicRegistry = "https://registry.npmjs.org";
 const trustedPublisherRepository = "responsedata/response-js";
 const trustedPublisherWorkflow = "publish-sdk.yml";
+const availabilityTimeoutMs = 20 * 60 * 1000;
+const availabilityPollIntervalMs = 5 * 1000;
 const tagArguments = process.argv.slice(2);
 const bootstrapPackageNames = new Set(
   locallyBootstrapableSdkPackageNames,
@@ -84,6 +86,31 @@ const npmView = (specifier) =>
     publicRegistry,
   ]);
 
+const npmDistTagVersions = (packageName) => {
+  const result = run("npm", [
+    "dist-tag",
+    "ls",
+    packageName,
+    "--registry",
+    publicRegistry,
+  ]);
+  if (result.status === 0) {
+    return new Set(
+      result.stdout
+        .split("\n")
+        .map((line) => line.slice(line.indexOf(":") + 1).trim())
+        .filter(Boolean),
+    );
+  }
+  if (isNotFound(result)) {
+    return new Set();
+  }
+  throw new Error(
+    `Unable to read npm dist-tags for ${packageName}:\n` +
+      `${result.stderr || result.stdout}`,
+  );
+};
+
 const readTrustedPublishers = (packageName) => {
   const result = run("npm", [
     "trust",
@@ -113,6 +140,48 @@ const isExpectedTrustedPublisher = (publisher) =>
   publisher.environment === undefined &&
   Array.isArray(publisher.permissions) &&
   publisher.permissions.includes("createPackage");
+
+const waitForNpmAvailability = async (manifests) => {
+  if (manifests.length === 0) {
+    return;
+  }
+  const deadline = Date.now() + availabilityTimeoutMs;
+  let nextProgressMessageAt = 0;
+
+  while (true) {
+    const pending = [];
+    for (const manifest of manifests) {
+      const published = npmView(`${manifest.name}@${manifest.version}`);
+      if (published.status === 0) {
+        continue;
+      }
+      if (!isNotFound(published)) {
+        throw new Error(
+          `Unable to check ${manifest.name}@${manifest.version} on npm:\n` +
+            `${published.stderr || published.stdout}`,
+        );
+      }
+      pending.push(`${manifest.name}@${manifest.version}`);
+    }
+
+    if (pending.length === 0) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `npm is still scanning ${pending.join(", ")} after 20 minutes. ` +
+          "Check npm for a security-review notice, then rerun this command.",
+      );
+    }
+    if (Date.now() >= nextProgressMessageAt) {
+      console.log(`Waiting for npm scanning: ${pending.join(", ")}...`);
+      nextProgressMessageAt = Date.now() + 30 * 1000;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, availabilityPollIntervalMs),
+    );
+  }
+};
 
 let stagingDirectory;
 
@@ -158,6 +227,7 @@ try {
   runChecked("pnpm", ["release:verify", releaseTag]);
 
   const packagesToPublish = [];
+  const acceptedBootstrapPackages = [];
   const packagesToConfigureTrust = manifests.filter((manifest) =>
     bootstrapPackageNames.has(manifest.name),
   );
@@ -176,6 +246,16 @@ try {
         `Unable to check ${manifest.name}@${manifest.version} on npm:\n` +
           `${exactVersion.stderr || exactVersion.stdout}`,
       );
+    }
+
+    if (npmDistTagVersions(manifest.name).has(manifest.version)) {
+      if (bootstrapPackageNames.has(manifest.name)) {
+        console.log(
+          `Skipping ${manifest.name}@${manifest.version}; npm accepted it and is scanning it.`,
+        );
+        acceptedBootstrapPackages.push(manifest);
+      }
+      continue;
     }
 
     const packageName = npmView(manifest.name);
@@ -259,16 +339,23 @@ try {
       publicRegistry,
     ]);
 
-    const publishedVersion = npmView(
-      `${manifest.name}@${manifest.version}`,
-    );
-    if (publishedVersion.status !== 0) {
+    const publishedVersion = npmView(`${manifest.name}@${manifest.version}`);
+    const awaitingAvailability =
+      isNotFound(publishedVersion) &&
+      npmDistTagVersions(manifest.name).has(manifest.version);
+    if (publishedVersion.status !== 0 && !awaitingAvailability) {
       throw new Error(
         `npm did not confirm ${manifest.name}@${manifest.version} after publishing:\n` +
           `${publishedVersion.stderr || publishedVersion.stdout}`,
       );
     }
-    console.log(`Bootstrapped ${manifest.name}@${manifest.version} on npm.`);
+    console.log(
+      `Bootstrapped ${manifest.name}@${manifest.version} on npm` +
+        `${awaitingAvailability ? "; npm is scanning it before public availability" : ""}.`,
+    );
+    if (awaitingAvailability) {
+      acceptedBootstrapPackages.push(manifest);
+    }
   }
 
   if (packagesToPublish.length === 0) {
@@ -313,6 +400,8 @@ try {
       `Configured ${trustedPublisherWorkflow} as the trusted publisher for ${manifest.name}.`,
     );
   }
+
+  await waitForNpmAvailability(acceptedBootstrapPackages);
 
   const postPublishStatus = output("git", ["status", "--short"]);
   if (postPublishStatus) {

@@ -35,7 +35,7 @@ token in Response and add a Proxy beside the `app` or `pages` directory
 (`proxy.ts` at the root, or `src/proxy.ts` for a `src` layout):
 
 ```sh
-RESPONSE_TOKEN=YOUR_PRIVATE_SERVER_TOKEN
+RESPONSE_SERVER_ID=YOUR_PRIVATE_SERVER_ID
 ```
 
 ```ts
@@ -132,7 +132,9 @@ This bootstrap requires npm 11.15 or newer. Run
 `npm logout --registry https://registry.npmjs.org` afterward if the local
 session should not remain available. The one locally bootstrapped version does
 not have provenance; later versions receive provenance automatically through
-trusted publishing.
+trusted publishing. npm may briefly hold a new package for publish-time scanning;
+the release flow recognizes that accepted state, waits for availability, and
+does not republish it.
 
 ### Local release fallback
 

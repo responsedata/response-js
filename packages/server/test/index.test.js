@@ -122,9 +122,9 @@ test("sends a privacy-limited server request observation", async () => {
   assert.equal(JSON.stringify(payload).includes("authorization"), false);
 });
 
-test("uses RESPONSE_TOKEN when no token option is supplied", async () => {
-  const previousToken = process.env.RESPONSE_TOKEN;
-  process.env.RESPONSE_TOKEN = TOKEN;
+test("uses RESPONSE_SERVER_ID when no token option is supplied", async () => {
+  const previousServerId = process.env.RESPONSE_SERVER_ID;
+  process.env.RESPONSE_SERVER_ID = TOKEN;
   const deliveries = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (_url, init) => {
@@ -143,10 +143,10 @@ test("uses RESPONSE_TOKEN when no token option is supplied", async () => {
     assert.equal(deliveries[0].headers.Authorization, `Bearer ${TOKEN}`);
   } finally {
     globalThis.fetch = originalFetch;
-    if (previousToken === undefined) {
-      delete process.env.RESPONSE_TOKEN;
+    if (previousServerId === undefined) {
+      delete process.env.RESPONSE_SERVER_ID;
     } else {
-      process.env.RESPONSE_TOKEN = previousToken;
+      process.env.RESPONSE_SERVER_ID = previousServerId;
     }
   }
 });

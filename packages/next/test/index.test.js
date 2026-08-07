@@ -34,7 +34,7 @@ test("keeps the client and server entries isolated", () => {
     "utf8",
   );
 
-  assert.doesNotMatch(clientSource, /RESPONSE_TOKEN|createResponseProxy/);
+  assert.doesNotMatch(clientSource, /RESPONSE_SERVER_ID|createResponseProxy/);
   assert.doesNotMatch(serverSource, /@responsedata\/browser|use client/);
   assert.match(serverSource, /from "@responsedata\/server"/);
   assert.match(serverSource, /createResponseProxy/);
