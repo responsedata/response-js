@@ -2,6 +2,21 @@
   "manifest_version": 3,
   "name": "Response Inspector",
   "version": "0.1.0",
-  "description": "Inspect Response browser analytics requests in Chrome DevTools.",
-  "devtools_page": "devtools.html"
+  "minimum_chrome_version": "102",
+  "description": "Inspect Response browser analytics requests from the Chrome toolbar.",
+  "permissions": ["activeTab", "storage", "webRequest"],
+  "host_permissions": [
+    "https://www.response.sh/api/events*",
+    "*://localhost/*",
+    "*://127.0.0.1/*",
+    "*://[::1]/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": "icon.png",
+    "default_title": "Response Inspector",
+    "default_popup": "popup.html"
+  }
 }

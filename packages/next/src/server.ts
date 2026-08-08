@@ -1,11 +1,9 @@
 import {
+  isPageRequestCandidate,
   trackServerRequest,
   type TrackServerRequestOptions,
 } from "@responsedata/server";
 import type { NextFetchEvent, NextRequest } from "next/server.js";
-
-const STATIC_ASSET_PATTERN =
-  /\.(?:avif|bmp|css|cur|eot|gif|ico|jpe?g|js|mjs|map|mp3|mp4|ogg|otf|png|svg|ttf|wasm|webm|webmanifest|webp|woff2?)$/i;
 
 type CoreResponseProxyOptions = Pick<
   TrackServerRequestOptions,
@@ -29,22 +27,18 @@ const isPrefetch = (headers: Headers) =>
   headers.has("next-router-prefetch") ||
   headers.has("x-middleware-prefetch") ||
   headers.has("x-nextjs-data") ||
-  headers.get("rsc") === "1" ||
-  headers.get("purpose")?.toLowerCase().includes("prefetch") === true ||
-  headers.get("sec-purpose")?.toLowerCase().includes("prefetch") === true;
+  headers.get("rsc") === "1";
 
 const isPageLikeNextRequest = (request: NextRequest) => {
-  const method = request.method.toUpperCase();
-  if (method !== "GET" && method !== "HEAD") {
+  if (!isPageRequestCandidate(request)) {
     return false;
   }
 
   const path = new URL(request.url).pathname;
   return !(
-    !path.startsWith("/") ||
-    path.startsWith("//") ||
+    path === "/api" ||
+    path.startsWith("/api/") ||
     /(?:^|\/)_next(?:\/|$)/.test(path) ||
-    STATIC_ASSET_PATTERN.test(path) ||
     isPrefetch(request.headers)
   );
 };

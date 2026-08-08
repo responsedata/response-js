@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import {
+  isPageRequestCandidate,
   SDK_VERSION,
   trackServerRequest,
 } from "../dist/index.js";
@@ -45,9 +46,64 @@ const captureDelivery = async ({
 test("loads through the published package entry", async () => {
   const sdk = await import("@responsedata/server");
 
+  assert.equal(typeof sdk.isPageRequestCandidate, "function");
   assert.equal(typeof sdk.trackServerRequest, "function");
   assert.equal(sdk.SDK_VERSION, serverPackage.version);
   assert.equal(SDK_VERSION, serverPackage.version);
+});
+
+test("selects page candidates from framework-independent request signals", () => {
+  const candidates = [
+    new Request("https://docs.example.com/guides/install"),
+    new Request("https://docs.example.com/pricing", {
+      headers: { "sec-fetch-dest": "document" },
+    }),
+    new Request("https://docs.example.com/robots.txt", { method: "HEAD" }),
+    new Request("https://docs.example.com/sitemap.xml"),
+    new Request("https://docs.example.com/guide.pdf"),
+    new Request("https://docs.example.com/api/public-data"),
+    new Request("https://docs.example.com/_next/image?url=%2Fhero.png"),
+    new Request("https://docs.example.com/from-agent", {
+      headers: { accept: "*/*", "user-agent": "ExampleBot/1.0" },
+    }),
+  ];
+  const nonCandidates = [
+    new Request("https://docs.example.com/action", { method: "POST" }),
+    new Request("https://docs.example.com/assets/app.js"),
+    new Request("https://docs.example.com/images/hero.png"),
+    new Request("https://docs.example.com/pricing", {
+      headers: { "sec-fetch-dest": "empty" },
+    }),
+    new Request("https://docs.example.com/pricing", {
+      headers: { purpose: "prefetch" },
+    }),
+    new Request("https://docs.example.com/pricing", {
+      headers: { "sec-purpose": "prefetch;prerender" },
+    }),
+    new Request("https://docs.example.com/data", {
+      headers: { accept: "application/json" },
+    }),
+    new Request("https://docs.example.com/data", {
+      headers: { accept: "application/activity+json" },
+    }),
+    new Request("https://docs.example.com//invalid-path"),
+    { headers: new Headers(), method: "GET", url: "ftp://example.com/file" },
+  ];
+
+  for (const request of candidates) {
+    assert.equal(isPageRequestCandidate(request), true, request.url);
+  }
+  for (const request of nonCandidates) {
+    assert.equal(isPageRequestCandidate(request), false, request.url);
+  }
+  assert.equal(
+    isPageRequestCandidate({
+      headers: new Headers(),
+      method: "GET",
+      url: "not a url",
+    }),
+    false,
+  );
 });
 
 test("sends a privacy-limited server request observation", async () => {

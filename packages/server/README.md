@@ -9,17 +9,30 @@ package directly. Adapter authors pass a request-like object with a URL,
 method, and header reader:
 
 ```ts
-import { trackServerRequest } from "@responsedata/server";
+import {
+  isPageRequestCandidate,
+  trackServerRequest,
+} from "@responsedata/server";
 
-const delivery = trackServerRequest({
-  request,
-  source: "nextjs",
-});
+if (isPageRequestCandidate(request)) {
+  const delivery = trackServerRequest({
+    request,
+    source: "nextjs",
+  });
 
-if (delivery) {
-  await delivery;
+  if (delivery) {
+    await delivery;
+  }
 }
 ```
+
+`isPageRequestCandidate` applies framework-independent request signals. It
+accepts GET and HEAD requests, document navigations, and requests that omit
+browser-only headers so direct crawlers remain observable. It rejects common
+static assets, prefetches and prerenders, browser subresource requests, and
+requests that accept only JSON. Framework adapters compose this helper with
+their routing rules; `trackServerRequest` itself remains a normalization and
+delivery primitive and does not apply page classification automatically.
 
 The private token defaults to the server-only `RESPONSE_SERVER_ID` environment
 variable. The core accepts only GET and HEAD requests, removes query strings

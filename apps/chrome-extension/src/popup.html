@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Response Inspector</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div>
+        <h1>Response</h1>
+        <p><span class="capture-dot" aria-hidden="true"></span>Capturing this tab</p>
+      </div>
+      <button id="clear-events" class="secondary-button" type="button" disabled>
+        Clear
+      </button>
+    </header>
+
+    <section class="capture-actions" aria-label="Capture controls">
+      <div>
+        <strong>Client-side requests</strong>
+        <span>Reload to include the initial page view.</span>
+      </div>
+      <button id="reload-tab" class="primary-button" type="button" disabled>
+        Reload &amp; capture
+      </button>
+    </section>
+
+    <p id="error-message" class="error-message" role="alert" hidden></p>
+
+    <main>
+      <div id="event-list" class="event-list" aria-label="Captured Response events"></div>
+
+      <div id="empty-state" class="empty-state">
+        <p>No Response requests captured yet.</p>
+        <span>Reload this tab, then reopen the popup.</span>
+      </div>
+    </main>
+
+    <footer>Up to 100 requests are kept for this tab and browser session.</footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

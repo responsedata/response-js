@@ -101,6 +101,10 @@ test("forwards adapter-supplied Cloudflare metadata for the original request", a
 test("ignores non-page requests and internal Next.js traffic", async () => {
   const ignoredRequests = [
     new Request("https://docs.example.com/api/action", { method: "POST" }),
+    new Request("https://docs.example.com/api"),
+    new Request(
+      "https://docs.example.com/api/projects/5e8d4f4d-2a32-4354-a111-123456789abc/dashboard",
+    ),
     new Request("https://docs.example.com/_next/static/chunk.js"),
     new Request("https://docs.example.com/_next/image?url=%2Fhero.png"),
     new Request("https://docs.example.com/_next/data/build-id/pricing.json"),
@@ -124,6 +128,12 @@ test("ignores non-page requests and internal Next.js traffic", async () => {
     new Request("https://docs.example.com/pricing", {
       headers: { "sec-purpose": "prefetch;prerender" },
     }),
+    new Request("https://docs.example.com/pricing", {
+      headers: { "sec-fetch-dest": "empty" },
+    }),
+    new Request("https://docs.example.com/data", {
+      headers: { accept: "application/json" },
+    }),
     new Request("https://docs.example.com/site.webmanifest"),
   ];
 
@@ -134,15 +144,16 @@ test("ignores non-page requests and internal Next.js traffic", async () => {
   }
 });
 
-test("keeps GET APIs and text discovery files visible", async () => {
+test("keeps headerless agents and text discovery files visible", async () => {
   for (const path of [
-    "/api/public-data",
+    "/agent-readable-page",
     "/robots.txt",
     "/sitemap.xml",
     "/llms.txt",
   ]) {
     const { deliveries, pending } = await captureDelivery({
       request: new Request(`https://docs.example.com${path}`, {
+        headers: { "user-agent": "ExampleBot/1.0" },
         method: "HEAD",
       }),
     });

@@ -1,6 +1,18 @@
 export const PRODUCTION_COLLECTOR_URL =
   "https://www.response.sh/api/events";
 
+export const WEB_REQUEST_URLS = [
+  "https://www.response.sh/api/events*",
+  "*://localhost/api/events*",
+  "*://127.0.0.1/api/events*",
+  "*://[::1]/api/events*",
+];
+
+export const MAX_CAPTURED_EVENTS = 100;
+export const ARMED_TABS_STORAGE_KEY = "response-inspector:armed-tabs";
+
+const CAPTURES_STORAGE_PREFIX = "response-inspector:captures:";
+const PENDING_STORAGE_PREFIX = "response-inspector:pending:";
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const RESULT_HEADER = "response-event-result";
 
@@ -18,6 +30,16 @@ export interface CapturedEvent {
   rawPayload: string;
   result: DeliveryResult;
   sdkVersion: string;
+}
+
+export interface PendingResponseEvent {
+  collectorUrl: string;
+  observedAt: string;
+  path: string;
+  rawPayload: string;
+  requestId: string;
+  sdkVersion: string;
+  tabId: number;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -61,12 +83,12 @@ export const isResponseEventRequest = (request: unknown): boolean => {
   );
 };
 
-const readHeader = (response: unknown, name: string): string | undefined => {
-  if (!isRecord(response) || !Array.isArray(response.headers)) {
+const readHeader = (headers: unknown, name: string): string | undefined => {
+  if (!Array.isArray(headers)) {
     return undefined;
   }
 
-  for (const header of response.headers) {
+  for (const header of headers) {
     if (
       isRecord(header) &&
       typeof header.name === "string" &&
@@ -80,32 +102,22 @@ const readHeader = (response: unknown, name: string): string | undefined => {
   return undefined;
 };
 
-const readStatus = (response: unknown): number => {
-  if (
-    isRecord(response) &&
-    typeof response.status === "number" &&
-    Number.isFinite(response.status)
-  ) {
-    return response.status;
-  }
-
-  return 0;
-};
-
 export const classifyDelivery = (
-  response: unknown,
+  httpStatus: number,
+  responseHeaders: unknown,
   networkError?: unknown,
 ): DeliveryResult => {
-  const status = readStatus(response);
   if (
-    status === 0 ||
+    httpStatus === 0 ||
     (typeof networkError === "string" && networkError.length > 0)
   ) {
     return "network";
   }
 
-  const receipt = readHeader(response, RESULT_HEADER)?.trim().toLowerCase();
-  if (receipt === "stored" && status >= 200 && status < 300) {
+  const receipt = readHeader(responseHeaders, RESULT_HEADER)
+    ?.trim()
+    .toLowerCase();
+  if (receipt === "stored" && httpStatus >= 200 && httpStatus < 300) {
     return "stored";
   }
   if (receipt === "not-stored") {
@@ -115,16 +127,37 @@ export const classifyDelivery = (
   return "unverified";
 };
 
-const readPayload = (request: UnknownRecord): {
+const readRequestText = (requestBody: unknown): string => {
+  if (!isRecord(requestBody)) {
+    return "";
+  }
+
+  if (Array.isArray(requestBody.raw)) {
+    const decoder = new TextDecoder();
+    return requestBody.raw
+      .map((part) => {
+        if (!isRecord(part) || !(part.bytes instanceof ArrayBuffer)) {
+          return "";
+        }
+
+        return decoder.decode(new Uint8Array(part.bytes));
+      })
+      .join("");
+  }
+
+  if (isRecord(requestBody.formData)) {
+    return JSON.stringify(requestBody.formData);
+  }
+
+  return "";
+};
+
+const readPayload = (requestBody: unknown): {
   path: string;
   rawPayload: string;
   sdkVersion: string;
 } => {
-  const postData = request.postData;
-  const rawText =
-    isRecord(postData) && typeof postData.text === "string"
-      ? postData.text
-      : "";
+  const rawText = readRequestText(requestBody);
 
   let payload: unknown;
   try {
@@ -134,15 +167,18 @@ const readPayload = (request: UnknownRecord): {
   }
 
   const payloadRecord = isRecord(payload) ? payload : undefined;
+  const formattedPayload =
+    payload === undefined ? undefined : JSON.stringify(payload, null, 2);
 
   return {
     path:
       payloadRecord && typeof payloadRecord.path === "string"
         ? payloadRecord.path
         : "Unknown path",
-    rawPayload: payloadRecord
-      ? JSON.stringify(payloadRecord, null, 2)
-      : rawText || "(No request payload)",
+    rawPayload:
+      typeof formattedPayload === "string"
+        ? formattedPayload
+        : rawText || "(No request payload)",
     sdkVersion:
       payloadRecord && typeof payloadRecord.sdkVersion === "string"
         ? payloadRecord.sdkVersion
@@ -151,7 +187,7 @@ const readPayload = (request: UnknownRecord): {
 };
 
 const readObservedAt = (value: unknown, fallback: Date): string => {
-  if (typeof value === "string") {
+  if (typeof value === "number" && Number.isFinite(value)) {
     const observedAt = new Date(value);
     if (!Number.isNaN(observedAt.getTime())) {
       return observedAt.toISOString();
@@ -161,25 +197,124 @@ const readObservedAt = (value: unknown, fallback: Date): string => {
   return fallback.toISOString();
 };
 
-export const captureResponseEvent = (
-  entry: unknown,
+export const capturePendingResponseEvent = (
+  request: unknown,
   now: () => Date = () => new Date(),
-): CapturedEvent | null => {
-  if (!isRecord(entry) || !isResponseEventRequest(entry.request)) {
+): PendingResponseEvent | null => {
+  if (!isRecord(request) || !isResponseEventRequest(request)) {
     return null;
   }
 
-  const request = entry.request as UnknownRecord;
-  const response = entry.response;
-  const payload = readPayload(request);
+  if (
+    typeof request.requestId !== "string" ||
+    typeof request.tabId !== "number" ||
+    !Number.isInteger(request.tabId) ||
+    request.tabId < 0
+  ) {
+    return null;
+  }
+
+  const payload = readPayload(request.requestBody);
 
   return {
     collectorUrl: request.url as string,
-    httpStatus: readStatus(response),
-    observedAt: readObservedAt(entry.startedDateTime, now()),
+    observedAt: readObservedAt(request.timeStamp, now()),
     path: payload.path,
     rawPayload: payload.rawPayload,
-    result: classifyDelivery(response, entry._error),
+    requestId: request.requestId,
     sdkVersion: payload.sdkVersion,
+    tabId: request.tabId,
   };
 };
+
+const readStatusCode = (response: unknown): number => {
+  if (
+    isRecord(response) &&
+    typeof response.statusCode === "number" &&
+    Number.isFinite(response.statusCode)
+  ) {
+    return response.statusCode;
+  }
+
+  return 0;
+};
+
+export const completeResponseEvent = (
+  pending: PendingResponseEvent,
+  response: unknown,
+  networkError?: string,
+): CapturedEvent => {
+  const httpStatus = readStatusCode(response);
+  const responseHeaders = isRecord(response)
+    ? response.responseHeaders
+    : undefined;
+
+  return {
+    collectorUrl: pending.collectorUrl,
+    httpStatus,
+    observedAt: pending.observedAt,
+    path: pending.path,
+    rawPayload: pending.rawPayload,
+    result: classifyDelivery(httpStatus, responseHeaders, networkError),
+    sdkVersion: pending.sdkVersion,
+  };
+};
+
+const DELIVERY_RESULTS = new Set<DeliveryResult>([
+  "stored",
+  "not-stored",
+  "network",
+  "unverified",
+]);
+
+export const isPendingResponseEvent = (
+  value: unknown,
+): value is PendingResponseEvent =>
+  isRecord(value) &&
+  typeof value.collectorUrl === "string" &&
+  typeof value.observedAt === "string" &&
+  typeof value.path === "string" &&
+  typeof value.rawPayload === "string" &&
+  typeof value.requestId === "string" &&
+  typeof value.sdkVersion === "string" &&
+  typeof value.tabId === "number" &&
+  Number.isInteger(value.tabId) &&
+  value.tabId >= 0;
+
+const isCapturedEvent = (value: unknown): value is CapturedEvent =>
+  isRecord(value) &&
+  typeof value.collectorUrl === "string" &&
+  typeof value.httpStatus === "number" &&
+  typeof value.observedAt === "string" &&
+  typeof value.path === "string" &&
+  typeof value.rawPayload === "string" &&
+  typeof value.result === "string" &&
+  DELIVERY_RESULTS.has(value.result as DeliveryResult) &&
+  typeof value.sdkVersion === "string";
+
+export const readCapturedEvents = (value: unknown): CapturedEvent[] =>
+  Array.isArray(value)
+    ? value.filter(isCapturedEvent).slice(-MAX_CAPTURED_EVENTS)
+    : [];
+
+export const appendCapturedEvent = (
+  current: unknown,
+  event: CapturedEvent,
+): CapturedEvent[] => [
+  ...readCapturedEvents(current).slice(-(MAX_CAPTURED_EVENTS - 1)),
+  event,
+];
+
+export const readArmedTabIds = (value: unknown): number[] =>
+  Array.isArray(value)
+    ? value.filter(
+        (tabId): tabId is number =>
+          typeof tabId === "number" && Number.isInteger(tabId) && tabId >= 0,
+      )
+    : [];
+
+export const captureStorageKey = (tabId: number): string =>
+  `${CAPTURES_STORAGE_PREFIX}${tabId}`;
+
+export const pendingStorageKey = (requestId: string): string =>
+  `${PENDING_STORAGE_PREFIX}${requestId}`;

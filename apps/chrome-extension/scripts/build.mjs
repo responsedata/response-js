@@ -17,8 +17,8 @@ await fs.mkdir(outputDirectory, { recursive: true });
 await build({
   bundle: true,
   entryPoints: {
-    devtools: path.join(appDirectory, "src/devtools.ts"),
-    panel: path.join(appDirectory, "src/panel.ts"),
+    background: path.join(appDirectory, "src/background.ts"),
+    popup: path.join(appDirectory, "src/popup.ts"),
   },
   format: "iife",
   legalComments: "none",
@@ -40,13 +40,21 @@ await build({
 await Promise.all(
   [
     ["manifest.json", "manifest.json"],
-    ["src/devtools.html", "devtools.html"],
-    ["src/panel.html", "panel.html"],
-    ["src/panel.css", "panel.css"],
+    ["src/popup.html", "popup.html"],
+    ["src/popup.css", "popup.css"],
   ].map(([source, destination]) =>
     fs.copyFile(
       path.join(appDirectory, source),
       path.join(outputDirectory, destination),
     ),
   ),
+);
+
+const encodedIcon = await fs.readFile(
+  path.join(appDirectory, "src/icon.png.base64"),
+  "utf8",
+);
+await fs.writeFile(
+  path.join(outputDirectory, "icon.png"),
+  Buffer.from(encodedIcon.trim(), "base64"),
 );

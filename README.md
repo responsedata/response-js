@@ -13,8 +13,8 @@ contract.
 - [`packages/next`](packages/next) publishes `@responsedata/nextjs`.
 - [`apps/cdn`](apps/cdn) builds and deploys the hosted browser script. It is an
   application workspace, not an npm package.
-- [`apps/chrome-extension`](apps/chrome-extension) builds the permission-free
-  Response Inspector panel for Chrome DevTools.
+- [`apps/chrome-extension`](apps/chrome-extension) builds the narrowly scoped
+  Response Inspector toolbar popup for Chrome.
 - [`docs/collector-api.md`](docs/collector-api.md) defines the API
   boundary between these public SDKs and the private collector.
 

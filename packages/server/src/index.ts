@@ -1,3 +1,11 @@
+import { createCloudflarePlatformEvidence } from "./platforms/cloudflare";
+import {
+  isRecord,
+  sanitizeString,
+  type PlatformEvidence,
+} from "./platforms/shared";
+import { createVercelPlatformEvidence } from "./platforms/vercel";
+
 declare const __RESPONSE_SERVER_SDK_VERSION__: string;
 declare const process: {
   env: {
@@ -15,6 +23,8 @@ const MAX_REFERRER_ORIGIN_LENGTH = 512;
 const MAX_USER_AGENT_LENGTH = 512;
 const SERVER_TOKEN_PATTERN = /^rsp_server_[A-Za-z0-9_-]{32}$/;
 const SOURCE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
+const STATIC_ASSET_PATTERN =
+  /\.(?:avif|bmp|css|cur|eot|gif|ico|jpe?g|js|mjs|map|mp3|mp4|ogg|otf|png|svg|ttf|wasm|webm|webmanifest|webp|woff2?)$/i;
 
 const SAFE_HEADERS = [
   ["accept-language", "acceptLanguage", 256],
@@ -50,6 +60,69 @@ export type TrackServerRequestOptions = {
   source: string;
   /** Defaults to the server-only RESPONSE_SERVER_ID environment variable. */
   token?: string;
+};
+
+const isPrefetchPurpose = (headers: ServerRequestHeaders) =>
+  [headers.get("purpose"), headers.get("sec-purpose")].some((value) => {
+    const purpose = value?.toLowerCase();
+    return purpose?.includes("prefetch") || purpose?.includes("prerender");
+  });
+
+const acceptsOnlyJson = (headers: ServerRequestHeaders) => {
+  const accept = headers.get("accept");
+  if (!accept) {
+    return false;
+  }
+
+  const mediaTypes = accept
+    .split(",")
+    .map((value) => value.split(";", 1)[0].trim().toLowerCase())
+    .filter(Boolean);
+  return (
+    mediaTypes.length > 0 &&
+    mediaTypes.every(
+      (mediaType) =>
+        mediaType === "application/json" || mediaType.endsWith("+json"),
+    )
+  );
+};
+
+/**
+ * Returns whether universal HTTP evidence is consistent with a page request.
+ * Missing browser-only headers remain eligible so direct crawlers are kept.
+ * Framework adapters should compose this with their own routing rules.
+ */
+export const isPageRequestCandidate = (request: ServerRequest): boolean => {
+  try {
+    const method = request.method.toUpperCase();
+    if (method !== "GET" && method !== "HEAD") {
+      return false;
+    }
+
+    const requestUrl = new URL(request.url);
+    const path = requestUrl.pathname;
+    if (
+      (requestUrl.protocol !== "http:" && requestUrl.protocol !== "https:") ||
+      !requestUrl.host ||
+      requestUrl.host.length > MAX_HOST_LENGTH ||
+      !path.startsWith("/") ||
+      path.startsWith("//") ||
+      path.length > MAX_PATH_LENGTH ||
+      STATIC_ASSET_PATTERN.test(path) ||
+      isPrefetchPurpose(request.headers) ||
+      acceptsOnlyJson(request.headers)
+    ) {
+      return false;
+    }
+
+    const destination = request.headers
+      .get("sec-fetch-dest")
+      ?.trim()
+      .toLowerCase();
+    return !destination || destination === "document";
+  } catch {
+    return false;
+  }
 };
 
 const normalizeCollectorEndpoint = (value = COLLECTOR_ENDPOINT) => {
@@ -95,35 +168,7 @@ const sanitizeHeader = (value: string | null, maximumLength: number) => {
   if (!value) {
     return "";
   }
-
-  let sanitized = "";
-  for (let index = 0; index < value.length; index += 1) {
-    if (sanitized.length === maximumLength) {
-      break;
-    }
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit === 0) {
-      continue;
-    }
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const nextCodeUnit = value.charCodeAt(index + 1);
-      if (nextCodeUnit < 0xdc00 || nextCodeUnit > 0xdfff) {
-        continue;
-      }
-      if (sanitized.length + 2 > maximumLength) {
-        break;
-      }
-      sanitized += value.slice(index, index + 2);
-      index += 1;
-      continue;
-    }
-    if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      continue;
-    }
-    sanitized += value[index];
-  }
-
-  return sanitized;
+  return sanitizeString(value, maximumLength);
 };
 
 const getReferrerOrigin = (headers: ServerRequestHeaders) => {
@@ -156,168 +201,18 @@ const getSafeHeaders = (headers: ServerRequestHeaders) => {
   return values;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const boundedString = (value: unknown, maximumLength: number) => {
-  if (typeof value !== "string" || value.length === 0) {
-    return undefined;
-  }
-
-  const sanitized = sanitizeHeader(value, maximumLength);
-  return sanitized || undefined;
-};
-
-const boundedInteger = (value: unknown, minimum: number, maximum: number) =>
-  typeof value === "number" &&
-  Number.isInteger(value) &&
-  value >= minimum &&
-  value <= maximum
-    ? value
-    : undefined;
-
-const boundedIntegerArray = (value: unknown, maximumItems: number) => {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-
-  const integers = value
-    .filter(
-      (item): item is number =>
-        typeof item === "number" &&
-        Number.isSafeInteger(item) &&
-        item >= 0,
-    )
-    .slice(0, maximumItems);
-  return integers.length > 0 ? integers : undefined;
-};
-
-const compact = (value: Record<string, unknown>) =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  );
-
-const hasValues = (value: object) => Object.keys(value).length > 0;
-
-const decodeHeader = (value: string | null, maximumLength: number) => {
-  if (!value) {
-    return undefined;
-  }
-
-  try {
-    return boundedString(decodeURIComponent(value), maximumLength);
-  } catch {
-    return boundedString(value, maximumLength);
-  }
-};
-
-const createCloudflareEvidence = (cloudflare: Record<string, unknown>) => {
-  const botManagement = isRecord(cloudflare.botManagement)
-    ? cloudflare.botManagement
-    : undefined;
-  const jsDetection = isRecord(botManagement?.jsDetection)
-    ? botManagement.jsDetection
-    : undefined;
-  const evidence = compact({
-    botScore: boundedInteger(botManagement?.score, 0, 99),
-    colo: boundedString(cloudflare.colo, 8),
-    corporateProxy:
-      typeof botManagement?.corporateProxy === "boolean"
-        ? botManagement.corporateProxy
-        : undefined,
-    detectionIds: boundedIntegerArray(botManagement?.detectionIds, 32),
-    ja3Hash: boundedString(botManagement?.ja3Hash, 128),
-    ja4: boundedString(botManagement?.ja4, 128),
-    jsDetectionPassed:
-      typeof jsDetection?.passed === "boolean"
-        ? jsDetection.passed
-        : undefined,
-    signedAgent:
-      typeof botManagement?.signedAgent === "boolean"
-        ? botManagement.signedAgent
-        : undefined,
-    staticResource:
-      typeof botManagement?.staticResource === "boolean"
-        ? botManagement.staticResource
-        : undefined,
-    verifiedBot:
-      typeof botManagement?.verifiedBot === "boolean"
-        ? botManagement.verifiedBot
-        : undefined,
-    verifiedBotCategory: boundedString(cloudflare.verifiedBotCategory, 64),
-  });
-  return hasValues(evidence) ? evidence : undefined;
-};
-
-const createCloudflareNetworkEvidence = (
-  cloudflare: Record<string, unknown>,
-) => {
-  const network = compact({
-    asn: boundedInteger(cloudflare.asn, 1, 4_294_967_295),
-    city: boundedString(cloudflare.city, 128),
-    continent: boundedString(cloudflare.continent, 2),
-    country: boundedString(cloudflare.country, 2),
-    organization: boundedString(cloudflare.asOrganization, 256),
-    region: boundedString(cloudflare.region, 128),
-    regionCode: boundedString(cloudflare.regionCode, 16),
-    source: "cloudflare",
-    timezone: boundedString(cloudflare.timezone, 64),
-  });
-  return hasValues(network) ? network : undefined;
-};
-
-const createVercelNetworkEvidence = (headers: ServerRequestHeaders) => {
-  // Vercel overwrites these headers with geolocation derived from the
-  // original request IP. Keep only coarse location and never send the IP.
-  if (!headers.get("x-vercel-id")) {
-    return undefined;
-  }
-
-  const network = compact({
-    city: decodeHeader(headers.get("x-vercel-ip-city"), 128),
-    continent: boundedString(headers.get("x-vercel-ip-continent"), 2),
-    country: boundedString(headers.get("x-vercel-ip-country"), 2),
-    regionCode: boundedString(
-      headers.get("x-vercel-ip-country-region"),
-      16,
-    ),
-    source: "vercel",
-    timezone: boundedString(headers.get("x-vercel-ip-timezone"), 64),
-  });
-  return Object.keys(network).length > 1 ? network : undefined;
-};
-
-const createTransportEvidence = (cloudflare: Record<string, unknown>) => {
-  const transport = compact({
-    clientQuicRtt: boundedInteger(cloudflare.clientQuicRtt, 0, 60_000),
-    clientTcpRtt: boundedInteger(cloudflare.clientTcpRtt, 0, 60_000),
-    httpProtocol: boundedString(cloudflare.httpProtocol, 32),
-    tlsCipher: boundedString(cloudflare.tlsCipher, 128),
-    tlsVersion: boundedString(cloudflare.tlsVersion, 32),
-  });
-  return hasValues(transport) ? transport : undefined;
-};
-
 const createPlatformEvidence = (
   request: ServerRequest,
   suppliedCloudflare?: unknown,
-) => {
+): PlatformEvidence => {
   const cloudflare = isRecord(suppliedCloudflare)
     ? suppliedCloudflare
     : isRecord(request.cf)
       ? request.cf
       : undefined;
-  return compact({
-    cloudflare: cloudflare
-      ? createCloudflareEvidence(cloudflare)
-      : undefined,
-    network: cloudflare
-      ? createCloudflareNetworkEvidence(cloudflare)
-      : createVercelNetworkEvidence(request.headers),
-    transport: cloudflare
-      ? createTransportEvidence(cloudflare)
-      : undefined,
-  });
+  return cloudflare
+    ? createCloudflarePlatformEvidence(cloudflare)
+    : createVercelPlatformEvidence(request.headers);
 };
 
 const normalizeRequest = ({

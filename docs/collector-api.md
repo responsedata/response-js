@@ -125,9 +125,12 @@ training crawlers, or bots that do not execute the SDK.
 The Next.js server integration observes page-like GET and HEAD requests that
 reach the application's Proxy, including fetch-only crawlers. It excludes
 common frontend assets such as scripts, styles, images, fonts, and media, along
-with framework-internal requests and prefetches. Requests served or blocked
-before Next.js are outside its coverage. Server requests and browser page views
-are reported separately and are not added together as visits.
+with API routes, browser fetch/XHR subrequests, JSON-only requests,
+framework-internal requests, and prefetches. Requests without browser-only
+headers remain eligible so direct crawlers are preserved, as are text discovery
+resources such as robots files, sitemaps, and `llms.txt`. Requests served or
+blocked before Next.js are outside its coverage. Server requests and browser
+page views are reported separately and are not added together as visits.
 
 ## Rollout
 

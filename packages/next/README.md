@@ -30,7 +30,7 @@ import { createResponseProxy } from "@responsedata/nextjs/server";
 export const proxy = createResponseProxy();
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
 };
 ```
 
@@ -43,8 +43,11 @@ original visitor user agent and referrer origin, and a small allowlist of safe
 browser headers. It automatically reads Vercel's coarse geolocation headers.
 It never sends query strings, bodies, cookies, authorization headers,
 coordinates, postal codes, or IP addresses. Common frontend assets (scripts,
-styles, images, fonts, and media), Next.js internal requests, and prefetches are
-ignored.
+styles, images, fonts, and media), API routes, browser fetch/XHR subrequests,
+JSON-only requests, Next.js internal requests, and prefetches are ignored.
+Requests that omit browser-only headers remain eligible so direct crawlers can
+still be observed. Text discovery resources such as `robots.txt`, sitemaps, and
+`llms.txt` remain eligible.
 
 OpenNext Cloudflare reconstructs the `NextRequest` without its Workers-only
 `cf` property. To include the original request's Cloudflare bot-management,
